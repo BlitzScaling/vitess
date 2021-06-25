@@ -153,6 +153,23 @@ func TestSelectInformationSchemaWithTableAndSchemaWithRoutedTables(t *testing.T)
 		expectedLog: []string{
 			"ResolveDestinations ks [] Destinations:DestinationAnyShard()",
 			"ExecuteMultiShard ks.1: dummy_select {} false false"},
+	}, {
+		testName:    "multiple different schema predicates",
+		tableSchema: []string{"schema", "myKeyspace"},
+		expectedLog: []string{
+			"ResolveDestinations schema [] Destinations:DestinationAnyShard()",
+			"ResolveDestinations myKeyspace [] Destinations:DestinationAnyShard()",
+			"ExecuteMultiShard schema.1: dummy_select {__replacevtschemaname: type:INT64 value:\"1\"} myKeyspace.1: dummy_select {__replacevtschemaname: type:INT64 value:\"1\"} false false"},
+	}, {
+		testName:  "multiple different table predicates",
+		tableName: []string{"table", "tableName"},
+		routed:    false,
+		expectedLog: []string{
+			"FindTable(`table`)",
+			"ResolveDestinations ks [] Destinations:DestinationAnyShard()",
+			"FindTable(tableName)",
+			"ResolveDestinations ks [] Destinations:DestinationAnyShard()",
+			"ExecuteMultiShard ks.1: dummy_select {__vttablename: type:VARBINARY value:\"table\"} ks.1: dummy_select {__vttablename: type:VARBINARY value:\"tableName\"} false false"},
 	}}
 
 	for _, tc := range tests {

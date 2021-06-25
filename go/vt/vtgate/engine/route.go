@@ -425,23 +425,33 @@ func (route *Route) paramsAllShards(vcursor VCursor, bindVars map[string]*queryp
 }
 
 func (route *Route) paramsSystemQuery(vcursor VCursor, bindVars map[string]*querypb.BindVariable) ([]*srvtopo.ResolvedShard, []map[string]*querypb.BindVariable, error) {
-	destinations, err := route.routeInfoSchemaQuery(vcursor, bindVars)
+	destinations, bvs, err := route.routeInfoSchemaQuery(vcursor, bindVars)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return destinations, []map[string]*querypb.BindVariable{bindVars}, nil
+	return destinations, bvs, nil
 }
 
-func (route *Route) routeInfoSchemaQuery(vcursor VCursor, bindVars map[string]*querypb.BindVariable) ([]*srvtopo.ResolvedShard, error) {
-	defaultRoute := func() ([]*srvtopo.ResolvedShard, error) {
+func (route *Route) routeInfoSchemaQuery(vcursor VCursor, bindVars map[string]*querypb.BindVariable) ([]*srvtopo.ResolvedShard, []map[string]*querypb.BindVariable, error) {
+	defaultRoute := func(bindVars map[string]*querypb.BindVariable) ([]*srvtopo.ResolvedShard, []map[string]*querypb.BindVariable, error) {
 		ks := route.Keyspace.Name
 		destinations, _, err := vcursor.ResolveDestinations(ks, nil, []key.Destination{key.DestinationAnyShard{}})
-		return destinations, vterrors.Wrapf(err, "failed to find information about keyspace `%s`", ks)
+		return destinations, []map[string]*querypb.BindVariable{bindVars}, vterrors.Wrapf(err, "failed to find information about keyspace `%s`", ks)
+	}
+	schemaRoute := func(ks string, bindVars map[string]*querypb.BindVariable) ([]*srvtopo.ResolvedShard, []map[string]*querypb.BindVariable, error) {
+		destinations, _, err := vcursor.ResolveDestinations(ks, nil, []key.Destination{key.DestinationAnyShard{}})
+		if err != nil {
+			log.Errorf("failed to route information_schema query to keyspace [%s]", ks)
+			bindVars[sqltypes.BvSchemaName] = sqltypes.StringBindVariable(ks)
+			return defaultRoute(bindVars)
+		}
+		setReplaceSchemaName(bindVars)
+		return destinations, []map[string]*querypb.BindVariable{bindVars}, nil
 	}
 
 	if len(route.SysTableTableName) == 0 && len(route.SysTableTableSchema) == 0 {
-		return defaultRoute()
+		return defaultRoute(bindVars)
 	}
 
 	env := evalengine.ExpressionEnv{
@@ -449,77 +459,144 @@ func (route *Route) routeInfoSchemaQuery(vcursor VCursor, bindVars map[string]*q
 		Row:      []sqltypes.Value{},
 	}
 
-	var specifiedKS string
+	specifiedKSs := make([]string, 0)
 	for _, tableSchema := range route.SysTableTableSchema {
 		result, err := tableSchema.Evaluate(env)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		ks := result.Value().ToString()
-		if specifiedKS == "" {
-			specifiedKS = ks
+		containsDup := false
+		for _, existingKs := range specifiedKSs {
+			if existingKs == ks {
+				containsDup = true
+				break
+			}
 		}
-		if specifiedKS != ks {
-			return nil, vterrors.Errorf(vtrpcpb.Code_UNIMPLEMENTED, "specifying two different database in the query is not supported")
+		if !containsDup {
+			specifiedKSs = append(specifiedKSs, ks)
 		}
-	}
-	if specifiedKS != "" {
-		bindVars[sqltypes.BvSchemaName] = sqltypes.StringBindVariable(specifiedKS)
 	}
 
-	var tableName string
+	tableNames := make([]string, 0)
 	for _, sysTableName := range route.SysTableTableName {
 		val, err := sysTableName.Evaluate(env)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		tabName := val.Value().ToString()
-		if tableName == "" {
-			tableName = tabName
-		}
-		if tableName != tabName {
-			return nil, vterrors.Errorf(vtrpcpb.Code_UNIMPLEMENTED, "two predicates for table_name not supported")
-		}
-	}
-	if tableName != "" {
-		bindVars[BvTableName] = sqltypes.StringBindVariable(tableName)
-	}
-
-	// if the table_schema is system system, route to default keyspace.
-	if sqlparser.SystemSchema(specifiedKS) {
-		return defaultRoute()
-	}
-
-	// the use has specified a table_name - let's check if it's a routed table
-	if tableName != "" {
-		rss, err := route.paramsRoutedTable(vcursor, bindVars, specifiedKS, tableName)
-		if err != nil {
-			// Only if keyspace is not found in vschema, we try with default keyspace.
-			// As the in the table_schema predicates for a keyspace 'ks' it can contain 'vt_ks'.
-			if vterrors.ErrState(err) == vterrors.BadDb {
-				return defaultRoute()
+		containsDup := false
+		for _, existingTabName := range tableNames {
+			if existingTabName == tabName {
+				containsDup = true
+				break
 			}
-			return nil, err
 		}
-		if rss != nil {
-			return rss, nil
+		if !containsDup {
+			tableNames = append(tableNames, tabName)
+		}
+	}
+	if len(tableNames) == 0 {
+		tableNames = append(tableNames, "")
+	}
+
+	bvs := make([]map[string]*querypb.BindVariable, 0)
+	shards := make([]*srvtopo.ResolvedShard, 0)
+
+	for _, specifiedKS := range specifiedKSs {
+		for _, tableName := range tableNames {
+			// if the table_schema is system system, route to default keyspace.
+			if sqlparser.SystemSchema(specifiedKS) {
+				bindVarsCopy := sqltypes.CopyBindVariables(bindVars)
+				bindVarsCopy[sqltypes.BvSchemaName] = sqltypes.StringBindVariable(specifiedKS)
+				bindVarsCopy[BvTableName] = sqltypes.StringBindVariable(tableName)
+				defaultShards, defaultBv, err := defaultRoute(bindVarsCopy)
+				if err != nil {
+					return nil, nil, err
+				}
+				bvs = append(bvs, defaultBv...)
+				shards = append(shards, defaultShards...)
+			} else {
+				bindVarsCopy := sqltypes.CopyBindVariables(bindVars)
+				bindVarsCopy[sqltypes.BvSchemaName] = sqltypes.StringBindVariable(specifiedKS)
+				// the use has specified a table_name - let's check if it's a routed table
+				if tableName != "" {
+					bindVarsCopy[BvTableName] = sqltypes.StringBindVariable(tableName)
+					rss, err := route.paramsRoutedTable(vcursor, bindVarsCopy, specifiedKS, tableName)
+					if err != nil {
+						// Only if keyspace is not found in vschema, we try with default keyspace.
+						// As the in the table_schema predicates for a keyspace 'ks' it can contain 'vt_ks'.
+						if vterrors.ErrState(err) == vterrors.BadDb {
+							defaultShards, defaultBv, defaultRouteErr := defaultRoute(bindVarsCopy)
+							if defaultRouteErr != nil {
+								return nil, nil, defaultRouteErr
+							}
+							bvs = append(bvs, defaultBv...)
+							shards = append(shards, defaultShards...)
+							continue
+						} else {
+							return nil, nil, err
+						}
+					}
+					if rss != nil {
+						bvs = append(bvs, bindVarsCopy)
+						shards = append(shards, rss...)
+					} else {
+						// it was not a routed table, we only have table_schema to work with
+						destinations, bv, err := schemaRoute(specifiedKS, bindVarsCopy)
+						if err != nil {
+							return nil, nil, err
+						}
+						bvs = append(bvs, bv...)
+						shards = append(shards, destinations...)
+					}
+				} else {
+					// it was not a routed table, we only have table_schema to work with
+					destinations, bv, err := schemaRoute(specifiedKS, bindVarsCopy)
+					if err != nil {
+						return nil, nil, err
+					}
+					bvs = append(bvs, bv...)
+					shards = append(shards, destinations...)
+				}
+			}
 		}
 	}
 
-	// it was not a routed table, and we dont have a schema name to look up. give up
-	if specifiedKS == "" {
-		return defaultRoute()
+	if len(specifiedKSs) == 0 {
+		for _, tableName := range tableNames {
+			bindVarsCopy := sqltypes.CopyBindVariables(bindVars)
+			bindVarsCopy[BvTableName] = sqltypes.StringBindVariable(tableName)
+			rss, err := route.paramsRoutedTable(vcursor, bindVarsCopy, "", tableName)
+			if err != nil {
+				// Only if keyspace is not found in vschema, we try with default keyspace.
+				// As the in the table_schema predicates for a keyspace 'ks' it can contain 'vt_ks'.
+				if vterrors.ErrState(err) == vterrors.BadDb {
+					defaultShards, defaultBv, defaultRouteErr := defaultRoute(bindVarsCopy)
+					if defaultRouteErr != nil {
+						return nil, nil, defaultRouteErr
+					}
+					bvs = append(bvs, defaultBv...)
+					shards = append(shards, defaultShards...)
+				} else {
+					return nil, nil, err
+				}
+			}
+			if rss != nil {
+				bvs = append(bvs, bindVarsCopy)
+				shards = append(shards, rss...)
+			} else {
+				defaultShards, defaultBv, defaultRouteErr := defaultRoute(bindVarsCopy)
+				if defaultRouteErr != nil {
+					return nil, nil, defaultRouteErr
+				}
+				bvs = append(bvs, defaultBv...)
+				shards = append(shards, defaultShards...)
+			}
+		}
 	}
 
-	// we only have table_schema to work with
-	destinations, _, err := vcursor.ResolveDestinations(specifiedKS, nil, []key.Destination{key.DestinationAnyShard{}})
-	if err != nil {
-		log.Errorf("failed to route information_schema query to keyspace [%s]", specifiedKS)
-		bindVars[sqltypes.BvSchemaName] = sqltypes.StringBindVariable(specifiedKS)
-		return defaultRoute()
-	}
-	setReplaceSchemaName(bindVars)
-	return destinations, nil
+	return shards, bvs, nil
 }
 
 func (route *Route) paramsRoutedTable(vcursor VCursor, bindVars map[string]*querypb.BindVariable, tableSchema string, tableName string) ([]*srvtopo.ResolvedShard, error) {

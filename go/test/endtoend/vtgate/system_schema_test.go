@@ -211,14 +211,11 @@ func TestMultipleSchemaPredicates(t *testing.T) {
 	require.EqualValues(t, 4, len(qr1.Fields))
 
 	// test a query with two keyspace names
-	query = fmt.Sprintf("select t.table_schema,t.table_name,c.column_name,c.column_type "+
-		"from information_schema.tables t "+
-		"join information_schema.columns c "+
-		"on c.table_schema = t.table_schema and c.table_name = t.table_name "+
-		"where t.table_schema = '%s' and c.table_schema = '%s' and c.table_schema = '%s'", KeyspaceName, KeyspaceName, "a")
-	_, err = conn.ExecuteFetch(query, 1000, true)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "specifying two different database in the query is not supported")
+	query = fmt.Sprintf("select table_schema,table_name "+
+		"from information_schema.tables "+
+		"where table_schema in ('%s', '%s')", KeyspaceName, "a")
+	qr1 = exec(t, conn, query)
+	require.EqualValues(t, 2, len(qr1.Fields))
 }
 
 func TestSystemSchemaQueryWithUnion(t *testing.T) {

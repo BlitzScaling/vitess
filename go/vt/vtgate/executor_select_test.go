@@ -2501,16 +2501,18 @@ func TestSelectFromInformationSchema(t *testing.T) {
 	executor, sbc1, _, _ := createExecutorEnv()
 	session := NewSafeSession(nil)
 
-	// check failure when trying to query two keyspaces
-	_, err := exec(executor, session, "SELECT B.TABLE_NAME FROM INFORMATION_SCHEMA.TABLES AS A, INFORMATION_SCHEMA.COLUMNS AS B WHERE A.TABLE_SCHEMA = 'TestExecutor' AND A.TABLE_SCHEMA = 'TestXBadSharding'")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "specifying two different database in the query is not supported")
-
 	// we pick a keyspace and query for table_schema = database(). should be routed to the picked keyspace
 	session.TargetString = "TestExecutor"
-	_, err = exec(executor, session, "SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = database()")
+	_, err := exec(executor, session, "SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = database()")
 	require.NoError(t, err)
 	assert.Equal(t, sbc1.StringQueries(), []string{"select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA = database()"})
+
+	// test to query two keyspaces
+	sbc1.Queries = nil
+	session.TargetString = "TestExecutor"
+	_, err = exec(executor, session, "SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA IN ('TestExecutor', 'performance_schema')")
+	require.NoError(t, err)
+	assert.Equal(t, sbc1.StringQueries(), []string{"select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA in (:__vtschemaname, :__vtschemaname)", "select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA in (:__vtschemaname, :__vtschemaname)"})
 
 	// `USE TestXBadSharding` and then query info_schema about TestExecutor - should target TestExecutor and not use the default keyspace
 	sbc1.Queries = nil
