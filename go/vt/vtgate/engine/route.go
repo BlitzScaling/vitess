@@ -466,16 +466,7 @@ func (route *Route) routeInfoSchemaQuery(vcursor VCursor, bindVars map[string]*q
 			return nil, nil, err
 		}
 		ks := result.Value().ToString()
-		containsDup := false
-		for _, existingKs := range specifiedKSs {
-			if existingKs == ks {
-				containsDup = true
-				break
-			}
-		}
-		if !containsDup {
-			specifiedKSs = append(specifiedKSs, ks)
-		}
+		addSysTableToken(ks, &specifiedKSs)
 	}
 
 	tableNames := make([]string, 0)
@@ -485,16 +476,7 @@ func (route *Route) routeInfoSchemaQuery(vcursor VCursor, bindVars map[string]*q
 			return nil, nil, err
 		}
 		tabName := val.Value().ToString()
-		containsDup := false
-		for _, existingTabName := range tableNames {
-			if existingTabName == tabName {
-				containsDup = true
-				break
-			}
-		}
-		if !containsDup {
-			tableNames = append(tableNames, tabName)
-		}
+		addSysTableToken(tabName, &tableNames)
 	}
 	if len(tableNames) == 0 {
 		tableNames = append(tableNames, "")
@@ -597,6 +579,19 @@ func (route *Route) routeInfoSchemaQuery(vcursor VCursor, bindVars map[string]*q
 	}
 
 	return shards, bvs, nil
+}
+
+func addSysTableToken(name string, list *[]string) {
+	containsDup := false
+	for _, existingName := range *list {
+		if existingName == name {
+			containsDup = true
+			break
+		}
+	}
+	if !containsDup {
+		*list = append(*list, name)
+	}
 }
 
 func (route *Route) paramsRoutedTable(vcursor VCursor, bindVars map[string]*querypb.BindVariable, tableSchema string, tableName string) ([]*srvtopo.ResolvedShard, error) {
