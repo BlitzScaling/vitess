@@ -478,6 +478,13 @@ func (route *Route) routeInfoSchemaQuery(vcursor VCursor, bindVars map[string]*q
 		tabName := val.Value().ToString()
 		addSysTableToken(tabName, &tableNames)
 	}
+
+	if len(specifiedKSs) == 0 && len(tableNames) == 0 {
+		return defaultRoute(bindVars)
+	}
+	if len(specifiedKSs) == 0 {
+		specifiedKSs = append(specifiedKSs, "")
+	}
 	if len(tableNames) == 0 {
 		tableNames = append(tableNames, "")
 	}
@@ -487,20 +494,17 @@ func (route *Route) routeInfoSchemaQuery(vcursor VCursor, bindVars map[string]*q
 
 	for _, specifiedKS := range specifiedKSs {
 		for _, tableName := range tableNames {
+			useDefaultRoute := false
+			useSchemaRoute := false
+			bindVarsCopy := sqltypes.CopyBindVariables(bindVars)
 			// if the table_schema is system system, route to default keyspace.
-			if sqlparser.SystemSchema(specifiedKS) {
-				bindVarsCopy := sqltypes.CopyBindVariables(bindVars)
+			if specifiedKS != "" {
 				bindVarsCopy[sqltypes.BvSchemaName] = sqltypes.StringBindVariable(specifiedKS)
+			}
+			if specifiedKS != "" && sqlparser.SystemSchema(specifiedKS) {
 				bindVarsCopy[BvTableName] = sqltypes.StringBindVariable(tableName)
-				defaultShards, defaultBv, err := defaultRoute(bindVarsCopy)
-				if err != nil {
-					return nil, nil, err
-				}
-				bvs = append(bvs, defaultBv...)
-				shards = append(shards, defaultShards...)
+				useDefaultRoute = true
 			} else {
-				bindVarsCopy := sqltypes.CopyBindVariables(bindVars)
-				bindVarsCopy[sqltypes.BvSchemaName] = sqltypes.StringBindVariable(specifiedKS)
 				// the use has specified a table_name - let's check if it's a routed table
 				if tableName != "" {
 					bindVarsCopy[BvTableName] = sqltypes.StringBindVariable(tableName)
@@ -509,71 +513,39 @@ func (route *Route) routeInfoSchemaQuery(vcursor VCursor, bindVars map[string]*q
 						// Only if keyspace is not found in vschema, we try with default keyspace.
 						// As the in the table_schema predicates for a keyspace 'ks' it can contain 'vt_ks'.
 						if vterrors.ErrState(err) == vterrors.BadDb {
-							defaultShards, defaultBv, defaultRouteErr := defaultRoute(bindVarsCopy)
-							if defaultRouteErr != nil {
-								return nil, nil, defaultRouteErr
-							}
-							bvs = append(bvs, defaultBv...)
-							shards = append(shards, defaultShards...)
-							continue
+							useDefaultRoute = true
 						} else {
 							return nil, nil, err
 						}
-					}
-					if rss != nil {
-						bvs = append(bvs, bindVarsCopy)
-						shards = append(shards, rss...)
 					} else {
-						// it was not a routed table, we only have table_schema to work with
-						destinations, bv, err := schemaRoute(specifiedKS, bindVarsCopy)
-						if err != nil {
-							return nil, nil, err
+						if rss != nil {
+							bvs = append(bvs, bindVarsCopy)
+							shards = append(shards, rss...)
+							continue
+						} else {
+							// it was not a routed table, we only have table_schema to work with
+							useSchemaRoute = true
 						}
-						bvs = append(bvs, bv...)
-						shards = append(shards, destinations...)
 					}
 				} else {
 					// it was not a routed table, we only have table_schema to work with
-					destinations, bv, err := schemaRoute(specifiedKS, bindVarsCopy)
-					if err != nil {
-						return nil, nil, err
-					}
-					bvs = append(bvs, bv...)
-					shards = append(shards, destinations...)
+					useSchemaRoute = true
 				}
 			}
-		}
-	}
-
-	if len(specifiedKSs) == 0 {
-		for _, tableName := range tableNames {
-			bindVarsCopy := sqltypes.CopyBindVariables(bindVars)
-			bindVarsCopy[BvTableName] = sqltypes.StringBindVariable(tableName)
-			rss, err := route.paramsRoutedTable(vcursor, bindVarsCopy, "", tableName)
-			if err != nil {
-				// Only if keyspace is not found in vschema, we try with default keyspace.
-				// As the in the table_schema predicates for a keyspace 'ks' it can contain 'vt_ks'.
-				if vterrors.ErrState(err) == vterrors.BadDb {
-					defaultShards, defaultBv, defaultRouteErr := defaultRoute(bindVarsCopy)
-					if defaultRouteErr != nil {
-						return nil, nil, defaultRouteErr
-					}
-					bvs = append(bvs, defaultBv...)
-					shards = append(shards, defaultShards...)
-				} else {
+			if useSchemaRoute && specifiedKS != "" {
+				destinations, bv, err := schemaRoute(specifiedKS, bindVarsCopy)
+				if err != nil {
 					return nil, nil, err
 				}
-			}
-			if rss != nil {
-				bvs = append(bvs, bindVarsCopy)
-				shards = append(shards, rss...)
-			} else {
-				defaultShards, defaultBv, defaultRouteErr := defaultRoute(bindVarsCopy)
-				if defaultRouteErr != nil {
-					return nil, nil, defaultRouteErr
+				bvs = append(bvs, bv...)
+				shards = append(shards, destinations...)
+			} else if specifiedKS == "" || useDefaultRoute {
+				destinations, bv, err := defaultRoute(bindVarsCopy)
+				if err != nil {
+					return nil, nil, err
 				}
-				bvs = append(bvs, defaultBv...)
-				shards = append(shards, defaultShards...)
+				bvs = append(bvs, bv...)
+				shards = append(shards, destinations...)
 			}
 		}
 	}
