@@ -353,9 +353,6 @@ func TestCanNormalize(t *testing.T) {
 	}, {
 		in:  "SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA IN ('commerce')",
 		out: false,
-	}, {
-		in:  "SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA IN ('commerce') union SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA IN ('user')",
-		out: false,
 	}}
 
 	for _, tc := range testcases {

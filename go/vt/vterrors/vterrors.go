@@ -327,8 +327,5 @@ func Equals(a, b error) bool {
 // Print is meant to print the vtError object in test failures.
 // For comparing two vterrors, use Equals() instead.
 func Print(err error) string {
-	if err != nil {
-		return fmt.Sprintf("%v: %v\n", Code(err), err.Error())
-	}
-	return fmt.Sprintf("%v: nil\n", Code(err))
+	return fmt.Sprintf("%v: %v\n", Code(err), err.Error())
 }
