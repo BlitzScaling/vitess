@@ -84,7 +84,6 @@ func TestInformationSchemaQuery(t *testing.T) {
 	assertSingleRowIsReturned(t, conn, "table_schema IN ('ks')", "vt_ks")
 	assertSingleRowIsReturned(t, conn, "table_schema IN ('vt_ks')", "vt_ks")
 	assertSingleRowIsReturned(t, conn, "table_schema IN ('ks') and table_name = 't1'", "vt_ks")
-	assertSingleRowIsReturned(t, conn, "table_schema IN ('ks') and table_name IN ('t1')", "vt_ks")
 }
 
 func assertResultIsEmpty(t *testing.T, conn *mysql.Conn, pre string) {
@@ -220,4 +219,39 @@ func TestMultipleSchemaPredicates(t *testing.T) {
 	_, err = conn.ExecuteFetch(query, 1000, true)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "specifying two different database in the query is not supported")
+}
+
+func TestSystemSchemaQueryWithUnion(t *testing.T) {
+	defer cluster.PanicHandler(t)
+	ctx := context.Background()
+	conn, err := mysql.Connect(ctx, &vtParams)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	testcases := []struct {
+		predicates  []string
+		expectedKSs []string
+	}{{
+		predicates:  []string{"table_schema = 'ks'", "table_schema = 'performance_schema'"},
+		expectedKSs: []string{"vt_ks", "performance_schema"},
+	}}
+	for _, tc := range testcases {
+		assertMultipleRowsAreReturned(t, conn, tc.predicates, tc.expectedKSs, len(tc.expectedKSs))
+	}
+}
+
+func assertMultipleRowsAreReturned(t *testing.T, conn *mysql.Conn, predicates []string, expectedKSs []string, expectedRows int) {
+	t.Run("", func(t *testing.T) {
+		var sql string
+		for i, predicate := range predicates {
+			if i != 0 {
+				sql = sql + " union all "
+			}
+			sql = sql + "SELECT table_schema FROM information_schema.tables WHERE " + predicate
+		}
+		qr, err := conn.ExecuteFetch(sql, 1000, true)
+		require.NoError(t, err)
+		assert.Equal(t, expectedRows, len(qr.Rows), "did not get matched rows back")
+		assert.Equal(t, expectedKSs, qr.Rows[0][0].ToString())
+	})
 }

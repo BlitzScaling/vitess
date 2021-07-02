@@ -487,7 +487,10 @@ func (rb *route) unionCanMerge(other *route, distinct bool) bool {
 		return false
 	}
 	switch rb.eroute.Opcode {
-	case engine.SelectUnsharded, engine.SelectDBA, engine.SelectReference:
+	// TODO (ruimin) this should check for eroute.SysTableTableSchema equivalence
+	case engine.SelectDBA:
+		return false
+	case engine.SelectUnsharded, engine.SelectReference:
 		return rb.eroute.Opcode == other.eroute.Opcode
 	case engine.SelectEqualUnique:
 		// Check if they target the same shard.
