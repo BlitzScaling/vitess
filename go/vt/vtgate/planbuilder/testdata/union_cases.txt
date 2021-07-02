@@ -356,46 +356,6 @@ Gen4 plan same as above
 }
 Gen4 plan same as above
 
-# union of information_schema tables
-"select * from information_schema.tables where TABLE_SCHEMA = 'user' union select * from information_schema.tables where TABLE_SCHEMA = 'music'"
-{
-  "QueryType": "SELECT",
-  "Original": "select * from information_schema.tables where TABLE_SCHEMA = 'user' union select * from information_schema.tables where TABLE_SCHEMA = 'music'",
-  "Instructions": {
-    "OperatorType": "Distinct",
-    "Inputs": [
-      {
-        "OperatorType": "Concatenate",
-        "Inputs": [
-          {
-            "OperatorType": "Route",
-            "Variant": "SelectDBA",
-            "Keyspace": {
-              "Name": "main",
-              "Sharded": false
-            },
-            "FieldQuery": "select * from information_schema.`tables` where 1 != 1",
-            "Query": "select * from information_schema.`tables` where TABLE_SCHEMA = :__vtschemaname",
-            "SysTableTableSchema": "[VARBINARY(\"user\")]"
-          },
-          {
-            "OperatorType": "Route",
-            "Variant": "SelectDBA",
-            "Keyspace": {
-              "Name": "main",
-              "Sharded": false
-            },
-            "FieldQuery": "select * from information_schema.`tables` where 1 != 1",
-            "Query": "select * from information_schema.`tables` where TABLE_SCHEMA = :__vtschemaname",
-            "SysTableTableSchema": "[VARBINARY(\"music\")]"
-          }
-        ]
-      }
-    ]
-  }
-}
-Gen4 plan same as above
-
 # multi-shard union
 "(select id from user union select id from music) union select 1 from dual"
 {

@@ -1175,34 +1175,14 @@ Gen4 plan same as above
   "QueryType": "SELECT",
   "Original": "select * from information_schema.a union select * from information_schema.b",
   "Instructions": {
-    "OperatorType": "Distinct",
-    "Inputs": [
-      {
-        "OperatorType": "Concatenate",
-        "Inputs": [
-          {
-            "OperatorType": "Route",
-            "Variant": "SelectDBA",
-            "Keyspace": {
-              "Name": "main",
-              "Sharded": false
-            },
-            "FieldQuery": "select * from information_schema.a where 1 != 1",
-            "Query": "select * from information_schema.a"
-          },
-          {
-            "OperatorType": "Route",
-            "Variant": "SelectDBA",
-            "Keyspace": {
-              "Name": "main",
-              "Sharded": false
-            },
-            "FieldQuery": "select * from information_schema.b where 1 != 1",
-            "Query": "select * from information_schema.b"
-          }
-        ]
-      }
-    ]
+    "OperatorType": "Route",
+    "Variant": "SelectDBA",
+    "Keyspace": {
+      "Name": "main",
+      "Sharded": false
+    },
+    "FieldQuery": "select * from information_schema.a where 1 != 1 union select * from information_schema.b where 1 != 1",
+    "Query": "select * from information_schema.a union select * from information_schema.b"
   }
 }
 Gen4 plan same as above
