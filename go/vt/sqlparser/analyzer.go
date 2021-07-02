@@ -124,7 +124,18 @@ func CanNormalize(stmt Statement) bool {
 	case *Select:
 		// Skip the system table normalization, normalization will cause schemaname replacement chaos.
 		return !containSystemTable(s.From)
-	case *Union, *Insert, *Update, *Delete, *Set, *CallProc, *Stream: // TODO: we could merge this logic into ASTrewriter
+	case *Union:
+		// Skip union that involves system table queries.
+		if !CanNormalize(s.FirstStatement) {
+			return false
+		}
+		for _, us := range s.UnionSelects {
+			if !CanNormalize(us.Statement) {
+				return false
+			}
+		}
+		return true
+	case *Insert, *Update, *Delete, *Set, *CallProc, *Stream: // TODO: we could merge this logic into ASTrewriter
 		return true
 	}
 	return false

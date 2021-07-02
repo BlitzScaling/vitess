@@ -234,6 +234,9 @@ func TestSystemSchemaQueryWithUnion(t *testing.T) {
 	}{{
 		predicates:  []string{"table_schema = 'ks'", "table_schema = 'performance_schema'"},
 		expectedKSs: []string{"vt_ks", "performance_schema"},
+	}, {
+		predicates:  []string{"table_schema in ('ks')", "table_schema in ('performance_schema')"},
+		expectedKSs: []string{"vt_ks", "performance_schema"},
 	}}
 	for _, tc := range testcases {
 		assertMultipleRowsAreReturned(t, conn, tc.predicates, tc.expectedKSs, len(tc.expectedKSs))
@@ -247,11 +250,13 @@ func assertMultipleRowsAreReturned(t *testing.T, conn *mysql.Conn, predicates []
 			if i != 0 {
 				sql = sql + " union all "
 			}
-			sql = sql + "SELECT table_schema FROM information_schema.tables WHERE " + predicate
+			sql = sql + "SELECT distinct table_schema FROM information_schema.tables WHERE " + predicate
 		}
 		qr, err := conn.ExecuteFetch(sql, 1000, true)
 		require.NoError(t, err)
 		assert.Equal(t, expectedRows, len(qr.Rows), "did not get matched rows back")
-		assert.Equal(t, expectedKSs, qr.Rows[0][0].ToString())
+		for i, expectedKs := range expectedKSs {
+			assert.Equal(t, expectedKs, qr.Rows[i][0].ToString())
+		}
 	})
 }
