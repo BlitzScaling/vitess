@@ -243,6 +243,7 @@ func isByteComparable(v sqltypes.Value) bool {
 		return true
 	}
 	switch v.Type() {
+	// TODO: extend to support Varchar
 	case sqltypes.Timestamp, sqltypes.Date, sqltypes.Time, sqltypes.Datetime, sqltypes.Enum, sqltypes.Set, sqltypes.TypeJSON:
 		return true
 	}
