@@ -117,7 +117,7 @@ func TestUnionCanMerge(t *testing.T) {
 		{false, false, false, false, false, false, false, false, false, false},
 		{false, false, false, false, false, true, false, false, false, false},
 		{false, false, false, false, false, false, false, false, false, false},
-		{false, false, false, false, false, false, false, true, false, false},
+		{false, false, false, false, false, false, false, false, false, false},
 		{false, false, false, false, false, false, false, false, true, false},
 		{false, false, false, false, false, false, false, false, false, false},
 	}

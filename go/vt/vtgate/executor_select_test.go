@@ -2514,6 +2514,28 @@ func TestSelectFromInformationSchema(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, sbc1.StringQueries(), []string{"select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA in (:__vtschemaname, :__vtschemaname)", "select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA in (:__vtschemaname, :__vtschemaname)"})
 
+	// test to query two keyspaces with and statement
+	sbc1.Queries = nil
+	session.TargetString = "TestExecutor"
+	_, err = exec(executor, session, "SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'TestExecutor' AND TABLE_SCHEMA = 'performance_schema'")
+	require.NoError(t, err)
+	assert.Equal(t, sbc1.StringQueries(), []string{
+		"select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA = :__vtschemaname and TABLE_SCHEMA = :__vtschemaname",
+		"select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA = :__vtschemaname and TABLE_SCHEMA = :__vtschemaname"})
+
+	// test to query two keyspaces with join
+	sbc1.Queries = nil
+	session.TargetString = "TestExecutor"
+	_, err = exec(executor, session, "SELECT * FROM INFORMATION_SCHEMA.TABLES AS a JOIN INFORMATION_SCHEMA.TABLES AS b "+
+		"ON a.TABLE_SCHEMA = b.TABLE_SCHEMA AND a.TABLE_NAME = b.TABLE_NAME "+
+		"WHERE a.TABLE_SCHEMA = 'TestExecutor' AND b.TABLE_SCHEMA = 'performance_schema'")
+	require.NoError(t, err)
+	assert.Equal(t, sbc1.StringQueries(), []string{
+		"select * from INFORMATION_SCHEMA.`TABLES` as a join INFORMATION_SCHEMA.`TABLES` as b " +
+			"on a.TABLE_SCHEMA = b.TABLE_SCHEMA and a.TABLE_NAME = b.TABLE_NAME where a.TABLE_SCHEMA = :__vtschemaname and b.TABLE_SCHEMA = :__vtschemaname",
+		"select * from INFORMATION_SCHEMA.`TABLES` as a join INFORMATION_SCHEMA.`TABLES` as b " +
+			"on a.TABLE_SCHEMA = b.TABLE_SCHEMA and a.TABLE_NAME = b.TABLE_NAME where a.TABLE_SCHEMA = :__vtschemaname and b.TABLE_SCHEMA = :__vtschemaname"})
+
 	// `USE TestXBadSharding` and then query info_schema about TestExecutor - should target TestExecutor and not use the default keyspace
 	sbc1.Queries = nil
 	session.TargetString = "TestXBadSharding"
