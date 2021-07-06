@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package planbuilder
+package abstract
 
 import (
 	"fmt"
@@ -53,7 +53,8 @@ func FuzzAnalyse(data []byte) int {
 		if err != nil {
 			return 0
 		}
-		_, _ = createQGFromSelect(stmt, semTable)
+		_, _ = CreateOperatorFromSelect(stmt, semTable)
+
 	default:
 		return 0
 	}
