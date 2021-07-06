@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"vitess.io/vitess/go/vt/log"
@@ -449,26 +450,19 @@ func (route *Route) routeInfoSchemaQuery(vcursor VCursor, bindVars map[string]*q
 		Row:      []sqltypes.Value{},
 	}
 
-	var specifiedKS string
-	for _, tableSchema := range route.SysTableTableSchema {
+	specifiedKS := make([]string, 0)
+	for i, tableSchema := range route.SysTableTableSchema {
 		result, err := tableSchema.Evaluate(env)
 		if err != nil {
 			return nil, err
 		}
 		ks := result.Value().ToString()
-		if specifiedKS == "" {
-			specifiedKS = ks
-		}
-		if specifiedKS != ks {
-			return nil, vterrors.Errorf(vtrpcpb.Code_UNIMPLEMENTED, "specifying two different database in the query is not supported")
-		}
-	}
-	if specifiedKS != "" {
-		bindVars[sqltypes.BvSchemaName] = sqltypes.StringBindVariable(specifiedKS)
+		specifiedKS = append(specifiedKS, ks)
+		bindVars[indexSysTableParam(sqltypes.BvSchemaName, i+1)] = sqltypes.StringBindVariable(ks)
 	}
 
 	var tableName string
-	for _, sysTableName := range route.SysTableTableName {
+	for i, sysTableName := range route.SysTableTableName {
 		val, err := sysTableName.Evaluate(env)
 		if err != nil {
 			return nil, err
@@ -477,22 +471,23 @@ func (route *Route) routeInfoSchemaQuery(vcursor VCursor, bindVars map[string]*q
 		if tableName == "" {
 			tableName = tabName
 		}
+		bindVars[indexSysTableParam(BvTableName, i+1)] = sqltypes.StringBindVariable(tabName)
 		if tableName != tabName {
 			return nil, vterrors.Errorf(vtrpcpb.Code_UNIMPLEMENTED, "two predicates for table_name not supported")
 		}
 	}
-	if tableName != "" {
-		bindVars[BvTableName] = sqltypes.StringBindVariable(tableName)
-	}
+	//if tableName != "" {
+	//	bindVars[fmt.Sprintf("%v%v", BvTableName, 1)] = sqltypes.StringBindVariable(tableName)
+	//}
 
 	// if the table_schema is system system, route to default keyspace.
-	if sqlparser.SystemSchema(specifiedKS) {
+	if sqlparser.SystemSchema(specifiedKS[0]) {
 		return defaultRoute()
 	}
 
 	// the use has specified a table_name - let's check if it's a routed table
 	if tableName != "" {
-		rss, err := route.paramsRoutedTable(vcursor, bindVars, specifiedKS, tableName)
+		rss, err := route.paramsRoutedTable(vcursor, bindVars, specifiedKS[0], tableName)
 		if err != nil {
 			// Only if keyspace is not found in vschema, we try with default keyspace.
 			// As the in the table_schema predicates for a keyspace 'ks' it can contain 'vt_ks'.
@@ -507,15 +502,15 @@ func (route *Route) routeInfoSchemaQuery(vcursor VCursor, bindVars map[string]*q
 	}
 
 	// it was not a routed table, and we dont have a schema name to look up. give up
-	if specifiedKS == "" {
+	if len(specifiedKS) == 0 {
 		return defaultRoute()
 	}
 
 	// we only have table_schema to work with
-	destinations, _, err := vcursor.ResolveDestinations(specifiedKS, nil, []key.Destination{key.DestinationAnyShard{}})
+	destinations, _, err := vcursor.ResolveDestinations(specifiedKS[0], nil, []key.Destination{key.DestinationAnyShard{}})
 	if err != nil {
 		log.Errorf("failed to route information_schema query to keyspace [%s]", specifiedKS)
-		bindVars[sqltypes.BvSchemaName] = sqltypes.StringBindVariable(specifiedKS)
+		bindVars[sqltypes.BvSchemaName] = sqltypes.StringBindVariable(specifiedKS[0])
 		return defaultRoute()
 	}
 	setReplaceSchemaName(bindVars)
@@ -548,8 +543,16 @@ func (route *Route) paramsRoutedTable(vcursor VCursor, bindVars map[string]*quer
 }
 
 func setReplaceSchemaName(bindVars map[string]*querypb.BindVariable) {
-	delete(bindVars, sqltypes.BvSchemaName)
-	bindVars[sqltypes.BvReplaceSchemaName] = sqltypes.Int64BindVariable(1)
+	delete(bindVars, indexSysTableParam(sqltypes.BvSchemaName, 1))
+	bindVars[indexSysTableParam(sqltypes.BvReplaceSchemaName, 1)] = sqltypes.Int64BindVariable(1)
+}
+
+func indexSysTableParam(name string, index int) string {
+	return fmt.Sprintf("%v%v", name, index)
+}
+
+func extractSysTableParamIndex(key, name string) string {
+	return strings.TrimPrefix(key, name)
 }
 
 func (route *Route) paramsAnyShard(vcursor VCursor, bindVars map[string]*querypb.BindVariable) ([]*srvtopo.ResolvedShard, []map[string]*querypb.BindVariable, error) {
