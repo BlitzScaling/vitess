@@ -239,11 +239,11 @@ func TestSystemSchemaQueryWithUnion(t *testing.T) {
 		expectedKSs: []string{"vt_ks", "performance_schema"},
 	}}
 	for _, tc := range testcases {
-		assertMultipleRowsAreReturned(t, conn, tc.predicates, tc.expectedKSs, len(tc.expectedKSs))
+		assertUnionPredicatesResults(t, conn, tc.predicates, tc.expectedKSs, len(tc.expectedKSs))
 	}
 }
 
-func assertMultipleRowsAreReturned(t *testing.T, conn *mysql.Conn, predicates []string, expectedKSs []string, expectedRows int) {
+func assertUnionPredicatesResults(t *testing.T, conn *mysql.Conn, predicates []string, expectedKSs []string, expectedRows int) {
 	t.Run("", func(t *testing.T) {
 		var sql string
 		for i, predicate := range predicates {
