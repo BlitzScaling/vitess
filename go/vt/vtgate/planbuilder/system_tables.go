@@ -181,18 +181,28 @@ func extractInfoSchemaRoutingPredicate(in sqlparser.Expr, sysTableSchema, sysTab
 }
 
 func findSysTableParamIndex(node evalengine.Expr, prefix string, exprs []evalengine.Expr) (string, bool) {
-	env := evalengine.ExpressionEnv{}
-	ntype, err := node.Type(env)
-	if err != nil {
-		return fmt.Sprintf("%v%v", prefix, len(exprs)+1), false
-	}
 	for i, expr := range exprs {
-		etype, err := expr.Type(env)
-		if err == nil && ntype == etype && node.String() == expr.String() {
+		if sysTableParamEquals(node, expr) {
 			return fmt.Sprintf("%v%v", prefix, i+1), true
 		}
 	}
 	return fmt.Sprintf("%v%v", prefix, len(exprs)+1), false
+}
+
+func sysTableParamEquals(lexpr evalengine.Expr, rexpr evalengine.Expr) bool {
+	switch lexpr.(type) {
+	case *evalengine.Literal:
+		if rv, ok := rexpr.(*evalengine.Literal); ok {
+			lv, _ := lexpr.(*evalengine.Literal)
+			return lv.Val.Value().ToString() == rv.Val.Value().ToString()
+		}
+	case *evalengine.BindVariable:
+		if rv, ok := rexpr.(*evalengine.BindVariable); ok {
+			lv, _ := lexpr.(*evalengine.BindVariable)
+			return lv.Key == rv.Key
+		}
+	}
+	return false
 }
 
 func populateValTuple(valTuples []sqlparser.ValTuple, numOfCol int) sqlparser.ValTuple {

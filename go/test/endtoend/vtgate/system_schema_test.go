@@ -84,6 +84,10 @@ func TestInformationSchemaQuery(t *testing.T) {
 	assertSingleRowIsReturned(t, conn, "table_schema IN ('ks')", "vt_ks")
 	assertSingleRowIsReturned(t, conn, "table_schema IN ('vt_ks')", "vt_ks")
 	assertSingleRowIsReturned(t, conn, "table_schema IN ('ks') and table_name = 't1'", "vt_ks")
+	// run end to end test for and expression.
+	assertSingleRowIsReturned(t, conn, "table_schema IN ('ks') and table_schema = 'ks'", "vt_ks")
+	assertSingleRowIsReturned(t, conn, "table_schema IN ('ks') and table_schema = 'vt_ks'", "vt_ks")
+	assertSingleRowIsReturned(t, conn, "table_schema IN ('vt_ks') and table_schema = 'ks'", "vt_ks")
 }
 
 func assertResultIsEmpty(t *testing.T, conn *mysql.Conn, pre string) {
