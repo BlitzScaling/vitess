@@ -80,10 +80,10 @@ func TestSelectDBA(t *testing.T) {
 		query, map[string]*querypb.BindVariable{},
 	)
 	require.NoError(t, err)
-	wantQueries = []*querypb.BoundQuery{{Sql: "select COUNT(*) from INFORMATION_SCHEMA.`TABLES` where table_schema = :__vtschemaname and table_name = :__vttablename",
+	wantQueries = []*querypb.BoundQuery{{Sql: "select COUNT(*) from INFORMATION_SCHEMA.`TABLES` where table_schema = :__vtschemaname1 and table_name = :__vttablename1",
 		BindVariables: map[string]*querypb.BindVariable{
-			"__vtschemaname": sqltypes.StringBindVariable("performance_schema"),
-			"__vttablename":  sqltypes.StringBindVariable("foo"),
+			"__vtschemaname1": sqltypes.StringBindVariable("performance_schema"),
+			"__vttablename1":  sqltypes.StringBindVariable("foo"),
 		}}}
 	utils.MustMatch(t, wantQueries, sbc1.Queries)
 
@@ -94,10 +94,10 @@ func TestSelectDBA(t *testing.T) {
 		query, map[string]*querypb.BindVariable{},
 	)
 	require.NoError(t, err)
-	wantQueries = []*querypb.BoundQuery{{Sql: "select 1 from information_schema.table_constraints where constraint_schema = :__vtschemaname and table_name = :__vttablename",
+	wantQueries = []*querypb.BoundQuery{{Sql: "select 1 from information_schema.table_constraints where constraint_schema = :__vtschemaname1 and table_name = :__vttablename1",
 		BindVariables: map[string]*querypb.BindVariable{
-			"__vtschemaname": sqltypes.StringBindVariable("vt_ks"),
-			"__vttablename":  sqltypes.StringBindVariable("user"),
+			"__vtschemaname1": sqltypes.StringBindVariable("vt_ks"),
+			"__vttablename1":  sqltypes.StringBindVariable("user"),
 		}}}
 	utils.MustMatch(t, wantQueries, sbc1.Queries)
 
@@ -108,9 +108,9 @@ func TestSelectDBA(t *testing.T) {
 		query, map[string]*querypb.BindVariable{},
 	)
 	require.NoError(t, err)
-	wantQueries = []*querypb.BoundQuery{{Sql: "select 1 from information_schema.table_constraints where constraint_schema = :__vtschemaname",
+	wantQueries = []*querypb.BoundQuery{{Sql: "select 1 from information_schema.table_constraints where constraint_schema = :__vtschemaname1",
 		BindVariables: map[string]*querypb.BindVariable{
-			"__vtschemaname": sqltypes.StringBindVariable("vt_ks"),
+			"__vtschemaname1": sqltypes.StringBindVariable("vt_ks"),
 		}}}
 	utils.MustMatch(t, wantQueries, sbc1.Queries)
 }
@@ -2512,7 +2512,9 @@ func TestSelectFromInformationSchema(t *testing.T) {
 	session.TargetString = "TestExecutor"
 	_, err = exec(executor, session, "SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA IN ('TestExecutor', 'performance_schema')")
 	require.NoError(t, err)
-	assert.Equal(t, sbc1.StringQueries(), []string{"select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA in (:__vtschemaname, :__vtschemaname)", "select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA in (:__vtschemaname, :__vtschemaname)"})
+	assert.Equal(t, sbc1.StringQueries(), []string{
+		"select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA in (:__vtschemaname1, :__vtschemaname2)",
+		"select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA in (:__vtschemaname1, :__vtschemaname2)"})
 
 	// test to query two keyspaces with and statement
 	sbc1.Queries = nil
@@ -2520,8 +2522,8 @@ func TestSelectFromInformationSchema(t *testing.T) {
 	_, err = exec(executor, session, "SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'TestExecutor' AND TABLE_SCHEMA = 'performance_schema'")
 	require.NoError(t, err)
 	assert.Equal(t, sbc1.StringQueries(), []string{
-		"select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA = :__vtschemaname and TABLE_SCHEMA = :__vtschemaname",
-		"select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA = :__vtschemaname and TABLE_SCHEMA = :__vtschemaname"})
+		"select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA = :__vtschemaname1 and TABLE_SCHEMA = :__vtschemaname2",
+		"select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA = :__vtschemaname1 and TABLE_SCHEMA = :__vtschemaname2"})
 
 	// test to query two keyspaces with join
 	sbc1.Queries = nil
@@ -2532,16 +2534,16 @@ func TestSelectFromInformationSchema(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, sbc1.StringQueries(), []string{
 		"select * from INFORMATION_SCHEMA.`TABLES` as a join INFORMATION_SCHEMA.`TABLES` as b " +
-			"on a.TABLE_SCHEMA = b.TABLE_SCHEMA and a.TABLE_NAME = b.TABLE_NAME where a.TABLE_SCHEMA = :__vtschemaname and b.TABLE_SCHEMA = :__vtschemaname",
+			"on a.TABLE_SCHEMA = b.TABLE_SCHEMA and a.TABLE_NAME = b.TABLE_NAME where a.TABLE_SCHEMA = :__vtschemaname1 and b.TABLE_SCHEMA = :__vtschemaname2",
 		"select * from INFORMATION_SCHEMA.`TABLES` as a join INFORMATION_SCHEMA.`TABLES` as b " +
-			"on a.TABLE_SCHEMA = b.TABLE_SCHEMA and a.TABLE_NAME = b.TABLE_NAME where a.TABLE_SCHEMA = :__vtschemaname and b.TABLE_SCHEMA = :__vtschemaname"})
+			"on a.TABLE_SCHEMA = b.TABLE_SCHEMA and a.TABLE_NAME = b.TABLE_NAME where a.TABLE_SCHEMA = :__vtschemaname1 and b.TABLE_SCHEMA = :__vtschemaname2"})
 
 	// `USE TestXBadSharding` and then query info_schema about TestExecutor - should target TestExecutor and not use the default keyspace
 	sbc1.Queries = nil
 	session.TargetString = "TestXBadSharding"
 	_, err = exec(executor, session, "SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'TestExecutor'")
 	require.NoError(t, err)
-	assert.Equal(t, sbc1.StringQueries(), []string{"select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA = :__vtschemaname"})
+	assert.Equal(t, sbc1.StringQueries(), []string{"select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA = :__vtschemaname1"})
 }
 
 func TestStreamOrderByLimitWithMultipleResults(t *testing.T) {

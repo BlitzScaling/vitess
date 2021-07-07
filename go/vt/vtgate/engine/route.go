@@ -439,14 +439,14 @@ func (route *Route) routeInfoSchemaQuery(vcursor VCursor, bindVars map[string]*q
 		destinations, _, err := vcursor.ResolveDestinations(ks, nil, []key.Destination{key.DestinationAnyShard{}})
 		return destinations, []map[string]*querypb.BindVariable{bindVars}, vterrors.Wrapf(err, "failed to find information about keyspace `%s`", ks)
 	}
-	schemaRoute := func(ks string, bindVars map[string]*querypb.BindVariable) ([]*srvtopo.ResolvedShard, []map[string]*querypb.BindVariable, error) {
+	schemaRoute := func(ks string, ksIndex int, bindVars map[string]*querypb.BindVariable) ([]*srvtopo.ResolvedShard, []map[string]*querypb.BindVariable, error) {
 		destinations, _, err := vcursor.ResolveDestinations(ks, nil, []key.Destination{key.DestinationAnyShard{}})
 		if err != nil {
 			log.Errorf("failed to route information_schema query to keyspace [%s]", ks)
-			bindVars[sqltypes.BvSchemaName] = sqltypes.StringBindVariable(ks)
+			bindVars[indexSysTableParam(sqltypes.BvSchemaName, ksIndex+1)] = sqltypes.StringBindVariable(ks)
 			return defaultRoute(bindVars)
 		}
-		setReplaceSchemaName(bindVars)
+		setReplaceSchemaName(ksIndex, bindVars)
 		return destinations, []map[string]*querypb.BindVariable{bindVars}, nil
 	}
 
@@ -460,23 +460,25 @@ func (route *Route) routeInfoSchemaQuery(vcursor VCursor, bindVars map[string]*q
 	}
 
 	specifiedKSs := make([]string, 0)
-	for _, tableSchema := range route.SysTableTableSchema {
+	for i, tableSchema := range route.SysTableTableSchema {
 		result, err := tableSchema.Evaluate(env)
 		if err != nil {
 			return nil, nil, err
 		}
 		ks := result.Value().ToString()
-		addSysTableToken(ks, &specifiedKSs)
+		specifiedKSs = append(specifiedKSs, ks)
+		bindVars[indexSysTableParam(sqltypes.BvSchemaName, i+1)] = sqltypes.StringBindVariable(ks)
 	}
 
 	tableNames := make([]string, 0)
-	for _, sysTableName := range route.SysTableTableName {
+	for i, sysTableName := range route.SysTableTableName {
 		val, err := sysTableName.Evaluate(env)
 		if err != nil {
 			return nil, nil, err
 		}
 		tabName := val.Value().ToString()
-		addSysTableToken(tabName, &tableNames)
+		tableNames = append(tableNames, tabName)
+		bindVars[indexSysTableParam(BvTableName, i+1)] = sqltypes.StringBindVariable(tabName)
 	}
 
 	if len(specifiedKSs) == 0 && len(tableNames) == 0 {
@@ -492,23 +494,25 @@ func (route *Route) routeInfoSchemaQuery(vcursor VCursor, bindVars map[string]*q
 	bvs := make([]map[string]*querypb.BindVariable, 0)
 	shards := make([]*srvtopo.ResolvedShard, 0)
 
-	for _, specifiedKS := range specifiedKSs {
-		for _, tableName := range tableNames {
+	// the use has specified a table_name - let's check if it's a routed table
+
+	for ksi, specifiedKS := range specifiedKSs {
+		for tbi, tableName := range tableNames {
 			useDefaultRoute := false
 			useSchemaRoute := false
 			bindVarsCopy := sqltypes.CopyBindVariables(bindVars)
 			// if the table_schema is system system, route to default keyspace.
 			if specifiedKS != "" {
-				bindVarsCopy[sqltypes.BvSchemaName] = sqltypes.StringBindVariable(specifiedKS)
+				bindVarsCopy[indexSysTableParam(sqltypes.BvSchemaName, ksi+1)] = sqltypes.StringBindVariable(specifiedKS)
 			}
 			if specifiedKS != "" && sqlparser.SystemSchema(specifiedKS) {
-				bindVarsCopy[BvTableName] = sqltypes.StringBindVariable(tableName)
+				bindVarsCopy[indexSysTableParam(BvTableName, tbi+1)] = sqltypes.StringBindVariable(tableName)
 				useDefaultRoute = true
 			} else {
 				// the use has specified a table_name - let's check if it's a routed table
 				if tableName != "" {
-					bindVarsCopy[BvTableName] = sqltypes.StringBindVariable(tableName)
-					rss, err := route.paramsRoutedTable(vcursor, bindVarsCopy, specifiedKS, tableName)
+					bindVarsCopy[indexSysTableParam(BvTableName, tbi+1)] = sqltypes.StringBindVariable(tableName)
+					rss, err := route.paramsRoutedTable(vcursor, bindVarsCopy, specifiedKS, tableName, ksi, tbi)
 					if err != nil {
 						// Only if keyspace is not found in vschema, we try with default keyspace.
 						// As the in the table_schema predicates for a keyspace 'ks' it can contain 'vt_ks'.
@@ -533,7 +537,7 @@ func (route *Route) routeInfoSchemaQuery(vcursor VCursor, bindVars map[string]*q
 				}
 			}
 			if useSchemaRoute && specifiedKS != "" {
-				destinations, bv, err := schemaRoute(specifiedKS, bindVarsCopy)
+				destinations, bv, err := schemaRoute(specifiedKS, ksi, bindVarsCopy)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -553,20 +557,7 @@ func (route *Route) routeInfoSchemaQuery(vcursor VCursor, bindVars map[string]*q
 	return shards, bvs, nil
 }
 
-func addSysTableToken(name string, list *[]string) {
-	containsDup := false
-	for _, existingName := range *list {
-		if existingName == name {
-			containsDup = true
-			break
-		}
-	}
-	if !containsDup {
-		*list = append(*list, name)
-	}
-}
-
-func (route *Route) paramsRoutedTable(vcursor VCursor, bindVars map[string]*querypb.BindVariable, tableSchema string, tableName string) ([]*srvtopo.ResolvedShard, error) {
+func (route *Route) paramsRoutedTable(vcursor VCursor, bindVars map[string]*querypb.BindVariable, tableSchema string, tableName string, ksIndex, tbIndex int) ([]*srvtopo.ResolvedShard, error) {
 	tbl := sqlparser.TableName{
 		Name:      sqlparser.NewTableIdent(tableName),
 		Qualifier: sqlparser.NewTableIdent(tableSchema),
@@ -579,21 +570,25 @@ func (route *Route) paramsRoutedTable(vcursor VCursor, bindVars map[string]*quer
 	if destination != nil {
 		// if we were able to find information about this table, let's use it
 		shards, _, err := vcursor.ResolveDestinations(destination.Keyspace.Name, nil, []key.Destination{key.DestinationAnyShard{}})
-		bindVars[BvTableName] = sqltypes.StringBindVariable(destination.Name.String())
+		bindVars[indexSysTableParam(BvTableName, tbIndex+1)] = sqltypes.StringBindVariable(destination.Name.String())
 		if tableSchema != "" {
-			setReplaceSchemaName(bindVars)
+			setReplaceSchemaName(ksIndex, bindVars)
 		}
 		return shards, err
 	}
 
 	// no routed table info found. we'll return nil and check on the outside if we can find the table_schema
-	bindVars[BvTableName] = sqltypes.StringBindVariable(tableName)
+	bindVars[indexSysTableParam(BvTableName, tbIndex+1)] = sqltypes.StringBindVariable(tableName)
 	return nil, nil
 }
 
-func setReplaceSchemaName(bindVars map[string]*querypb.BindVariable) {
-	delete(bindVars, sqltypes.BvSchemaName)
-	bindVars[sqltypes.BvReplaceSchemaName] = sqltypes.Int64BindVariable(1)
+func setReplaceSchemaName(index int, bindVars map[string]*querypb.BindVariable) {
+	delete(bindVars, indexSysTableParam(sqltypes.BvSchemaName, index+1))
+	bindVars[indexSysTableParam(sqltypes.BvReplaceSchemaName, index+1)] = sqltypes.Int64BindVariable(1)
+}
+
+func indexSysTableParam(name string, index int) string {
+	return fmt.Sprintf("%v%v", name, index)
 }
 
 func (route *Route) paramsAnyShard(vcursor VCursor, bindVars map[string]*querypb.BindVariable) ([]*srvtopo.ResolvedShard, []map[string]*querypb.BindVariable, error) {

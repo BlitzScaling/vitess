@@ -154,9 +154,7 @@ func (qre *QueryExecutor) Execute() (reply *sqltypes.Result, err error) {
 	case p.PlanSelect, p.PlanSelectImpossible, p.PlanShow:
 		maxrows := qre.getSelectLimit()
 		qre.bindVars["#maxLimit"] = sqltypes.Int64BindVariable(maxrows + 1)
-		if qre.bindVars[sqltypes.BvReplaceSchemaName] != nil {
-			qre.bindVars[sqltypes.BvSchemaName] = sqltypes.StringBindVariable(qre.tsv.config.DB.DBName)
-		}
+		replaceSchemaName(qre.bindVars, qre.tsv.config.DB.DBName)
 		qr, err := qre.execSelect()
 		if err != nil {
 			return nil, err
@@ -243,9 +241,7 @@ func (qre *QueryExecutor) txConnExec(conn *StatefulConnection) (*sqltypes.Result
 	case p.PlanSelect, p.PlanSelectImpossible, p.PlanShow:
 		maxrows := qre.getSelectLimit()
 		qre.bindVars["#maxLimit"] = sqltypes.Int64BindVariable(maxrows + 1)
-		if qre.bindVars[sqltypes.BvReplaceSchemaName] != nil {
-			qre.bindVars[sqltypes.BvSchemaName] = sqltypes.StringBindVariable(qre.tsv.config.DB.DBName)
-		}
+		replaceSchemaName(qre.bindVars, qre.tsv.config.DB.DBName)
 		qr, err := qre.txFetch(conn, false)
 		if err != nil {
 			return nil, err
@@ -262,6 +258,22 @@ func (qre *QueryExecutor) txConnExec(conn *StatefulConnection) (*sqltypes.Result
 		return qre.execProc(conn)
 	}
 	return nil, vterrors.Errorf(vtrpcpb.Code_INTERNAL, "[BUG] %s unexpected plan type", qre.plan.PlanID.String())
+}
+
+func replaceSchemaName(bindVars map[string]*querypb.BindVariable, dbName string) {
+	index := 1
+	for {
+		if bindVars[indexSysTableParam(sqltypes.BvReplaceSchemaName, index)] != nil {
+			bindVars[fmt.Sprintf("%v%v", sqltypes.BvSchemaName, index)] = sqltypes.StringBindVariable(dbName)
+		} else if bindVars[indexSysTableParam(sqltypes.BvSchemaName, index)] == nil {
+			return
+		}
+		index++
+	}
+}
+
+func indexSysTableParam(name string, index int) string {
+	return fmt.Sprintf("%v%v", name, index)
 }
 
 // Stream performs a streaming query execution.
