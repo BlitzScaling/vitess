@@ -1725,7 +1725,7 @@ Gen4 plan same as above
       "Sharded": false
     },
     "FieldQuery": "select DELETE_RULE, UPDATE_RULE from INFORMATION_SCHEMA.KEY_COLUMN_USAGE as KCU join INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS as RC on KCU.CONSTRAINT_NAME = RC.CONSTRAINT_NAME where 1 != 1",
-    "Query": "select DELETE_RULE, UPDATE_RULE from INFORMATION_SCHEMA.KEY_COLUMN_USAGE as KCU join INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS as RC on KCU.CONSTRAINT_NAME = RC.CONSTRAINT_NAME where KCU.TABLE_SCHEMA = :__vtschemaname and KCU.TABLE_NAME = :__vttablename and KCU.COLUMN_NAME = 'id' and KCU.REFERENCED_TABLE_SCHEMA = 'test' and KCU.CONSTRAINT_NAME = 'data_type_table_id_fkey' order by KCU.CONSTRAINT_NAME asc, KCU.COLUMN_NAME asc",
+    "Query": "select DELETE_RULE, UPDATE_RULE from INFORMATION_SCHEMA.KEY_COLUMN_USAGE as KCU join INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS as RC on KCU.CONSTRAINT_NAME = RC.CONSTRAINT_NAME where KCU.TABLE_SCHEMA = :__vtschemaname1 and KCU.TABLE_NAME = :__vttablename1 and KCU.COLUMN_NAME = 'id' and KCU.REFERENCED_TABLE_SCHEMA = 'test' and KCU.CONSTRAINT_NAME = 'data_type_table_id_fkey' order by KCU.CONSTRAINT_NAME asc, KCU.COLUMN_NAME asc",
     "SysTableTableName": "[VARBINARY(\"data_type_table\")]",
     "SysTableTableSchema": "[VARBINARY(\"test\")]"
   }
@@ -1750,8 +1750,8 @@ Gen4 plan same as above
           "Sharded": false
         },
         "FieldQuery": "select KCU.DELETE_RULE from INFORMATION_SCHEMA.KEY_COLUMN_USAGE as KCU join INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS as RC on KCU.CONSTRAINT_NAME = RC.CONSTRAINT_NAME where 1 != 1",
-        "Query": "select KCU.DELETE_RULE from INFORMATION_SCHEMA.KEY_COLUMN_USAGE as KCU join INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS as RC on KCU.CONSTRAINT_NAME = RC.CONSTRAINT_NAME where KCU.TABLE_SCHEMA = :__vtschemaname and KCU.TABLE_NAME = :__vttablename and KCU.TABLE_NAME = :__vttablename order by KCU.CONSTRAINT_NAME asc, KCU.COLUMN_NAME asc",
-        "SysTableTableName": "[VARBINARY(\"data_type_table\"), VARBINARY(\"data_type_table\")]",
+        "Query": "select KCU.DELETE_RULE from INFORMATION_SCHEMA.KEY_COLUMN_USAGE as KCU join INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS as RC on KCU.CONSTRAINT_NAME = RC.CONSTRAINT_NAME where KCU.TABLE_SCHEMA = :__vtschemaname1 and KCU.TABLE_NAME = :__vttablename1 and KCU.TABLE_NAME = :__vttablename1 order by KCU.CONSTRAINT_NAME asc, KCU.COLUMN_NAME asc",
+        "SysTableTableName": "[VARBINARY(\"data_type_table\")]",
         "SysTableTableSchema": "[VARBINARY(\"test\")]"
       },
       {
@@ -1762,7 +1762,7 @@ Gen4 plan same as above
           "Sharded": false
         },
         "FieldQuery": "select S.UPDATE_RULE from INFORMATION_SCHEMA.K as S where 1 != 1",
-        "Query": "select S.UPDATE_RULE from INFORMATION_SCHEMA.K as S where S.TABLE_SCHEMA = :__vtschemaname and S.TABLE_NAME = :__vttablename",
+        "Query": "select S.UPDATE_RULE from INFORMATION_SCHEMA.K as S where S.TABLE_SCHEMA = :__vtschemaname1 and S.TABLE_NAME = :__vttablename1",
         "SysTableTableName": "[VARBINARY(\"sc\")]",
         "SysTableTableSchema": "[VARBINARY(\"test\")]"
       }
@@ -1783,7 +1783,7 @@ Gen4 plan same as above
       "Sharded": false
     },
     "FieldQuery": "select routine_name as `name`, routine_definition as definition from information_schema.routines where 1 != 1",
-    "Query": "select routine_name as `name`, routine_definition as definition from information_schema.routines where ROUTINE_SCHEMA = :__vtschemaname and ROUTINE_TYPE = 'PROCEDURE'",
+    "Query": "select routine_name as `name`, routine_definition as definition from information_schema.routines where ROUTINE_SCHEMA = :__vtschemaname1 and ROUTINE_TYPE = 'PROCEDURE'",
     "SysTableTableSchema": "[:v1]"
   }
 }
@@ -1801,7 +1801,7 @@ Gen4 plan same as above
       "Sharded": false
     },
     "FieldQuery": "select SUM(data_length + index_length) as size from information_schema.`TABLES` where 1 != 1",
-    "Query": "select SUM(data_length + index_length) as size from information_schema.`TABLES` where table_schema = :__vtschemaname",
+    "Query": "select SUM(data_length + index_length) as size from information_schema.`TABLES` where table_schema = :__vtschemaname1",
     "SysTableTableSchema": "[:v1]"
   }
 }
@@ -1819,7 +1819,7 @@ Gen4 plan same as above
       "Sharded": false
     },
     "FieldQuery": "select kcu.constraint_name as constraint_name, kcu.column_name as column_name, kcu.referenced_table_name as referenced_table_name, kcu.referenced_column_name as referenced_column_name, kcu.ordinal_position as ordinal_position, kcu.table_name as table_name, rc.delete_rule as delete_rule, rc.update_rule as update_rule from information_schema.key_column_usage as kcu join information_schema.referential_constraints as rc on kcu.constraint_name = rc.constraint_name where 1 != 1",
-    "Query": "select kcu.constraint_name as constraint_name, kcu.column_name as column_name, kcu.referenced_table_name as referenced_table_name, kcu.referenced_column_name as referenced_column_name, kcu.ordinal_position as ordinal_position, kcu.table_name as table_name, rc.delete_rule as delete_rule, rc.update_rule as update_rule from information_schema.key_column_usage as kcu join information_schema.referential_constraints as rc on kcu.constraint_name = rc.constraint_name where kcu.table_schema = :__vtschemaname and rc.constraint_schema = :__vtschemaname and kcu.referenced_column_name is not null order by ordinal_position asc",
+    "Query": "select kcu.constraint_name as constraint_name, kcu.column_name as column_name, kcu.referenced_table_name as referenced_table_name, kcu.referenced_column_name as referenced_column_name, kcu.ordinal_position as ordinal_position, kcu.table_name as table_name, rc.delete_rule as delete_rule, rc.update_rule as update_rule from information_schema.key_column_usage as kcu join information_schema.referential_constraints as rc on kcu.constraint_name = rc.constraint_name where kcu.table_schema = :__vtschemaname1 and rc.constraint_schema = :__vtschemaname2 and kcu.referenced_column_name is not null order by ordinal_position asc",
     "SysTableTableSchema": "[:v1, :v2]"
   }
 }

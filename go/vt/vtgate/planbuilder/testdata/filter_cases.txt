@@ -1924,7 +1924,7 @@ Gen4 plan same as above
       "Sharded": false
     },
     "FieldQuery": "select * from INFORMATION_SCHEMA.`TABLES` where 1 != 1",
-    "Query": "select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA = :__vtschemaname and TABLE_SCHEMA = :__vtschemaname",
+    "Query": "select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA = :__vtschemaname1 and TABLE_SCHEMA = :__vtschemaname2",
     "SysTableTableSchema": "[VARBINARY(\"user\"), VARBINARY(\"main\")]"
   }
 }
@@ -1942,7 +1942,7 @@ Gen4 plan same as above
       "Sharded": false
     },
     "FieldQuery": "select * from INFORMATION_SCHEMA.`TABLES` where 1 != 1",
-    "Query": "select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA in (:__vtschemaname)",
+    "Query": "select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA in (:__vtschemaname1)",
     "SysTableTableSchema": "[VARBINARY(\"user\")]"
   }
 }
@@ -1960,7 +1960,7 @@ Gen4 plan same as above
       "Sharded": false
     },
     "FieldQuery": "select * from INFORMATION_SCHEMA.`TABLES` where 1 != 1",
-    "Query": "select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA in (:__vtschemaname, :__vtschemaname)",
+    "Query": "select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA in (:__vtschemaname1, :__vtschemaname2)",
     "SysTableTableSchema": "[VARBINARY(\"user\"), VARBINARY(\"main\")]"
   }
 }
@@ -1978,7 +1978,7 @@ Gen4 plan same as above
       "Sharded": false
     },
     "FieldQuery": "select * from INFORMATION_SCHEMA.`TABLES` where 1 != 1",
-    "Query": "select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA not in (:__vtschemaname, :__vtschemaname)",
+    "Query": "select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA not in (:__vtschemaname1, :__vtschemaname2)",
     "SysTableTableSchema": "[VARBINARY(\"user\"), VARBINARY(\"main\")]"
   }
 }
@@ -1996,7 +1996,7 @@ Gen4 plan same as above
       "Sharded": false
     },
     "FieldQuery": "select * from INFORMATION_SCHEMA.`TABLES` where 1 != 1",
-    "Query": "select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA in (:__vtschemaname, :__vtschemaname, database())",
+    "Query": "select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA in (:__vtschemaname1, :__vtschemaname2, database())",
     "SysTableTableSchema": "[VARBINARY(\"user\"), VARBINARY(\"main\")]"
   }
 }
@@ -2014,7 +2014,7 @@ Gen4 plan same as above
       "Sharded": false
     },
     "FieldQuery": "select * from INFORMATION_SCHEMA.`TABLES` where 1 != 1",
-    "Query": "select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA in (:__vtschemaname) and TABLE_NAME in (:__vttablename)",
+    "Query": "select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA in (:__vtschemaname1) and TABLE_NAME in (:__vttablename1)",
     "SysTableTableName": "[VARBINARY(\"route1\")]",
     "SysTableTableSchema": "[VARBINARY(\"ks\")]"
   }
@@ -2033,7 +2033,7 @@ Gen4 plan same as above
       "Sharded": false
     },
     "FieldQuery": "select * from INFORMATION_SCHEMA.`TABLES` where 1 != 1",
-    "Query": "select * from INFORMATION_SCHEMA.`TABLES` where (TABLE_SCHEMA, TABLE_NAME) in ((:__vtschemaname, :__vttablename))",
+    "Query": "select * from INFORMATION_SCHEMA.`TABLES` where (TABLE_SCHEMA, TABLE_NAME) in ((:__vtschemaname1, :__vttablename1))",
     "SysTableTableName": "[VARBINARY(\"route1\")]",
     "SysTableTableSchema": "[VARBINARY(\"ks\")]"
   }
@@ -2052,7 +2052,7 @@ Gen4 plan same as above
       "Sharded": false
     },
     "FieldQuery": "select * from INFORMATION_SCHEMA.`TABLES` where 1 != 1",
-    "Query": "select * from INFORMATION_SCHEMA.`TABLES` where (TABLE_SCHEMA, TABLE_NAME) not in ((:__vtschemaname, :__vttablename), (:__vtschemaname, :__vttablename))",
+    "Query": "select * from INFORMATION_SCHEMA.`TABLES` where (TABLE_SCHEMA, TABLE_NAME) not in ((:__vtschemaname1, :__vttablename1), (:__vtschemaname2, :__vttablename2))",
     "SysTableTableName": "[VARBINARY(\"route1\"), VARBINARY(\"route2\")]",
     "SysTableTableSchema": "[VARBINARY(\"ks\"), VARBINARY(\"ks1\")]"
   }
@@ -2071,7 +2071,7 @@ Gen4 plan same as above
       "Sharded": false
     },
     "FieldQuery": "select * from INFORMATION_SCHEMA.`TABLES` where 1 != 1",
-    "Query": "select * from INFORMATION_SCHEMA.`TABLES` where (TABLE_SCHEMA, TABLE_NAME, LOWER(COLUMN_NAME)) in ((:__vtschemaname, :__vttablename, 'col'))",
+    "Query": "select * from INFORMATION_SCHEMA.`TABLES` where (TABLE_SCHEMA, TABLE_NAME, LOWER(COLUMN_NAME)) in ((:__vtschemaname1, :__vttablename1, 'col'))",
     "SysTableTableName": "[VARBINARY(\"route1\")]",
     "SysTableTableSchema": "[VARBINARY(\"ks\")]"
   }
@@ -2107,7 +2107,7 @@ Gen4 plan same as above
       "Sharded": false
     },
     "FieldQuery": "select * from INFORMATION_SCHEMA.`TABLES` where 1 != 1",
-    "Query": "select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA = :__vtschemaname",
+    "Query": "select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA = :__vtschemaname1",
     "SysTableTableSchema": "[VARBINARY(\"ks\")]"
   }
 }
@@ -2125,7 +2125,8 @@ Gen4 plan same as above
       "Sharded": false
     },
     "FieldQuery": "select * from INFORMATION_SCHEMA.`TABLES` where 1 != 1",
-    "Query": "select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA = 'ks' or TABLE_SCHEMA = 'main'"
+    "Query": "select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA = :__vtschemaname1 or TABLE_SCHEMA = :__vtschemaname2",
+    "SysTableTableSchema": "[VARBINARY(\"ks\"), VARBINARY(\"main\")]"
   }
 }
 
@@ -2142,7 +2143,7 @@ Gen4 plan same as above
       "Sharded": false
     },
     "FieldQuery": "select * from INFORMATION_SCHEMA.`TABLES` where 1 != 1",
-    "Query": "select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA = :__vtschemaname and TABLE_NAME = :__vttablename",
+    "Query": "select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA = :__vtschemaname1 and TABLE_NAME = :__vttablename1",
     "SysTableTableName": "[VARBINARY(\"route1\")]",
     "SysTableTableSchema": "[VARBINARY(\"ks\")]"
   }
@@ -2161,7 +2162,7 @@ Gen4 plan same as above
       "Sharded": false
     },
     "FieldQuery": "select * from INFORMATION_SCHEMA.`TABLES` where 1 != 1",
-    "Query": "select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA = :__vtschemaname and other_column = 42",
+    "Query": "select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA = :__vtschemaname1 and other_column = 42",
     "SysTableTableSchema": "[VARBINARY(\"ks\")]"
   }
 }
@@ -2243,7 +2244,7 @@ Gen4 plan same as above
       "Sharded": false
     },
     "FieldQuery": "select * from INFORMATION_SCHEMA.`TABLES` where 1 != 1",
-    "Query": "select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA = :__vtschemaname and (other_column = 42 or TABLE_SCHEMA = 'ks') and (other_column = 42 or foobar = 'value')",
+    "Query": "select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA = :__vtschemaname1 and (other_column = 42 or TABLE_SCHEMA = :__vtschemaname1) and (other_column = 42 or foobar = 'value')",
     "SysTableTableSchema": "[VARBINARY(\"ks\")]"
   }
 }

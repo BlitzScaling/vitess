@@ -101,7 +101,7 @@ func TestSelectInformationSchemaWithTableAndSchemaWithRoutedTables(t *testing.T)
 		expectedLog: []string{
 			"FindTable(`schema`.`table`)",
 			"ResolveDestinations routedKeyspace [] Destinations:DestinationAnyShard()",
-			"ExecuteMultiShard routedKeyspace.1: dummy_select {__replacevtschemaname: type:INT64 value:\"1\" __vttablename: type:VARBINARY value:\"routedTable\"} false false"},
+			"ExecuteMultiShard routedKeyspace.1: dummy_select {__replacevtschemaname1: type:INT64 value:\"1\" __vttablename1: type:VARBINARY value:\"routedTable\"} false false"},
 	}, {
 		testName:    "both schema and table predicates - not routed",
 		tableSchema: []string{"schema"},
@@ -110,16 +110,25 @@ func TestSelectInformationSchemaWithTableAndSchemaWithRoutedTables(t *testing.T)
 		expectedLog: []string{
 			"FindTable(`schema`.`table`)",
 			"ResolveDestinations schema [] Destinations:DestinationAnyShard()",
-			"ExecuteMultiShard schema.1: dummy_select {__replacevtschemaname: type:INT64 value:\"1\" __vttablename: type:VARBINARY value:\"table\"} false false"},
+			"ExecuteMultiShard schema.1: dummy_select {__replacevtschemaname1: type:INT64 value:\"1\" __vttablename1: type:VARBINARY value:\"table\"} false false"},
 	}, {
 		testName:    "multiple schema and table predicates",
-		tableSchema: []string{"schema", "schema", "schema"},
-		tableName:   []string{"table", "table", "table"},
+		tableSchema: []string{"schema", "schema"},
+		tableName:   []string{"table", "table"},
 		routed:      false,
 		expectedLog: []string{
 			"FindTable(`schema`.`table`)",
 			"ResolveDestinations schema [] Destinations:DestinationAnyShard()",
-			"ExecuteMultiShard schema.1: dummy_select {__replacevtschemaname: type:INT64 value:\"1\" __vttablename: type:VARBINARY value:\"table\"} false false"},
+			"FindTable(`schema`.`table`)",
+			"ResolveDestinations schema [] Destinations:DestinationAnyShard()",
+			"FindTable(`schema`.`table`)",
+			"ResolveDestinations schema [] Destinations:DestinationAnyShard()",
+			"FindTable(`schema`.`table`)",
+			"ResolveDestinations schema [] Destinations:DestinationAnyShard()",
+			"ExecuteMultiShard schema.1: dummy_select {__replacevtschemaname1: type:INT64 value:\"1\" __vtschemaname2: type:VARBINARY value:\"schema\" __vttablename1: type:VARBINARY value:\"table\" __vttablename2: type:VARBINARY value:\"table\"} " +
+				"schema.1: dummy_select {__replacevtschemaname1: type:INT64 value:\"1\" __vtschemaname2: type:VARBINARY value:\"schema\" __vttablename1: type:VARBINARY value:\"table\" __vttablename2: type:VARBINARY value:\"table\"} " +
+				"schema.1: dummy_select {__replacevtschemaname2: type:INT64 value:\"1\" __vtschemaname1: type:VARBINARY value:\"schema\" __vttablename1: type:VARBINARY value:\"table\" __vttablename2: type:VARBINARY value:\"table\"} " +
+				"schema.1: dummy_select {__replacevtschemaname2: type:INT64 value:\"1\" __vtschemaname1: type:VARBINARY value:\"schema\" __vttablename1: type:VARBINARY value:\"table\" __vttablename2: type:VARBINARY value:\"table\"} false false"},
 	}, {
 		testName:  "table name predicate - routed table",
 		tableName: []string{"tableName"},
@@ -127,7 +136,7 @@ func TestSelectInformationSchemaWithTableAndSchemaWithRoutedTables(t *testing.T)
 		expectedLog: []string{
 			"FindTable(tableName)",
 			"ResolveDestinations routedKeyspace [] Destinations:DestinationAnyShard()",
-			"ExecuteMultiShard routedKeyspace.1: dummy_select {__vttablename: type:VARBINARY value:\"routedTable\"} false false"},
+			"ExecuteMultiShard routedKeyspace.1: dummy_select {__vttablename1: type:VARBINARY value:\"routedTable\"} false false"},
 	}, {
 		testName:  "table name predicate - not routed",
 		tableName: []string{"tableName"},
@@ -135,19 +144,23 @@ func TestSelectInformationSchemaWithTableAndSchemaWithRoutedTables(t *testing.T)
 		expectedLog: []string{
 			"FindTable(tableName)",
 			"ResolveDestinations ks [] Destinations:DestinationAnyShard()",
-			"ExecuteMultiShard ks.1: dummy_select {__vttablename: type:VARBINARY value:\"tableName\"} false false"},
+			"ExecuteMultiShard ks.1: dummy_select {__vttablename1: type:VARBINARY value:\"tableName\"} false false"},
 	}, {
 		testName:    "schema predicate",
 		tableSchema: []string{"myKeyspace"},
 		expectedLog: []string{
 			"ResolveDestinations myKeyspace [] Destinations:DestinationAnyShard()",
-			"ExecuteMultiShard myKeyspace.1: dummy_select {__replacevtschemaname: type:INT64 value:\"1\"} false false"},
+			"ExecuteMultiShard myKeyspace.1: dummy_select {__replacevtschemaname1: type:INT64 value:\"1\"} false false"},
 	}, {
 		testName:    "multiple schema predicates",
-		tableSchema: []string{"myKeyspace", "myKeyspace", "myKeyspace", "myKeyspace"},
+		tableSchema: []string{"myKeyspace", "myKeyspace", "myKeyspace"},
 		expectedLog: []string{
 			"ResolveDestinations myKeyspace [] Destinations:DestinationAnyShard()",
-			"ExecuteMultiShard myKeyspace.1: dummy_select {__replacevtschemaname: type:INT64 value:\"1\"} false false"},
+			"ResolveDestinations myKeyspace [] Destinations:DestinationAnyShard()",
+			"ResolveDestinations myKeyspace [] Destinations:DestinationAnyShard()",
+			"ExecuteMultiShard myKeyspace.1: dummy_select {__replacevtschemaname1: type:INT64 value:\"1\" __vtschemaname2: type:VARBINARY value:\"myKeyspace\" __vtschemaname3: type:VARBINARY value:\"myKeyspace\"} " +
+				"myKeyspace.1: dummy_select {__replacevtschemaname2: type:INT64 value:\"1\" __vtschemaname1: type:VARBINARY value:\"myKeyspace\" __vtschemaname3: type:VARBINARY value:\"myKeyspace\"} " +
+				"myKeyspace.1: dummy_select {__replacevtschemaname3: type:INT64 value:\"1\" __vtschemaname1: type:VARBINARY value:\"myKeyspace\" __vtschemaname2: type:VARBINARY value:\"myKeyspace\"} false false"},
 	}, {
 		testName: "no predicates",
 		expectedLog: []string{
@@ -159,7 +172,7 @@ func TestSelectInformationSchemaWithTableAndSchemaWithRoutedTables(t *testing.T)
 		expectedLog: []string{
 			"ResolveDestinations schema [] Destinations:DestinationAnyShard()",
 			"ResolveDestinations myKeyspace [] Destinations:DestinationAnyShard()",
-			"ExecuteMultiShard schema.1: dummy_select {__replacevtschemaname: type:INT64 value:\"1\"} myKeyspace.1: dummy_select {__replacevtschemaname: type:INT64 value:\"1\"} false false"},
+			"ExecuteMultiShard schema.1: dummy_select {__replacevtschemaname1: type:INT64 value:\"1\" __vtschemaname2: type:VARBINARY value:\"myKeyspace\"} myKeyspace.1: dummy_select {__replacevtschemaname2: type:INT64 value:\"1\" __vtschemaname1: type:VARBINARY value:\"schema\"} false false"},
 	}, {
 		testName:  "multiple different table predicates",
 		tableName: []string{"table", "tableName"},
@@ -169,7 +182,7 @@ func TestSelectInformationSchemaWithTableAndSchemaWithRoutedTables(t *testing.T)
 			"ResolveDestinations ks [] Destinations:DestinationAnyShard()",
 			"FindTable(tableName)",
 			"ResolveDestinations ks [] Destinations:DestinationAnyShard()",
-			"ExecuteMultiShard ks.1: dummy_select {__vttablename: type:VARBINARY value:\"table\"} ks.1: dummy_select {__vttablename: type:VARBINARY value:\"tableName\"} false false"},
+			"ExecuteMultiShard ks.1: dummy_select {__vttablename1: type:VARBINARY value:\"table\" __vttablename2: type:VARBINARY value:\"tableName\"} ks.1: dummy_select {__vttablename1: type:VARBINARY value:\"table\" __vttablename2: type:VARBINARY value:\"tableName\"} false false"},
 	}}
 
 	for _, tc := range tests {
