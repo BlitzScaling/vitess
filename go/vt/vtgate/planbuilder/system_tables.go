@@ -176,6 +176,18 @@ func extractInfoSchemaRoutingPredicate(in sqlparser.Expr, sysTableSchema, sysTab
 		sysTableSchemas = append(sysTableSchemas, schemas...)
 		sysTableNames = append(sysTableNames, names...)
 		return sysTableSchemas, sysTableNames, nil
+	case *sqlparser.AndExpr:
+		sysTableSchemas := make([]evalengine.Expr, 0)
+		sysTableNames := make([]evalengine.Expr, 0)
+		for _, subexpr := range sqlparser.SplitAndExpression(nil, cmp) {
+			schemas, names, err := extractInfoSchemaRoutingPredicate(subexpr, append(sysTableSchema, sysTableSchemas...), append(sysTableName, sysTableNames...))
+			if err != nil {
+				return nil, nil, err
+			}
+			sysTableSchemas = append(sysTableSchemas, schemas...)
+			sysTableNames = append(sysTableNames, names...)
+		}
+		return sysTableSchemas, sysTableNames, nil
 	}
 	return nil, nil, nil
 }
