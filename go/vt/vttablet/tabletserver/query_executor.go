@@ -264,7 +264,7 @@ func replaceSchemaName(bindVars map[string]*querypb.BindVariable, dbName string)
 	index := 1
 	for {
 		if bindVars[indexSysTableParam(sqltypes.BvReplaceSchemaName, index)] != nil {
-			bindVars[fmt.Sprintf("%v%v", sqltypes.BvSchemaName, index)] = sqltypes.StringBindVariable(dbName)
+			bindVars[indexSysTableParam(sqltypes.BvSchemaName, index)] = sqltypes.StringBindVariable(dbName)
 		} else if bindVars[indexSysTableParam(sqltypes.BvSchemaName, index)] == nil {
 			return
 		}

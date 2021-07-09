@@ -489,12 +489,11 @@ func (route *Route) routeInfoSchemaQuery(vcursor VCursor, bindVars map[string]*q
 	}
 	if len(tableNames) == 0 {
 		tableNames = append(tableNames, "")
+		bindVars[indexSysTableParam(BvTableName, 0)] = sqltypes.StringBindVariable("")
 	}
 
 	bvs := make([]map[string]*querypb.BindVariable, 0)
 	shards := make([]*srvtopo.ResolvedShard, 0)
-
-	// the use has specified a table_name - let's check if it's a routed table
 
 	for ksi, specifiedKS := range specifiedKSs {
 		for tbi, tableName := range tableNames {
@@ -502,16 +501,11 @@ func (route *Route) routeInfoSchemaQuery(vcursor VCursor, bindVars map[string]*q
 			useSchemaRoute := false
 			bindVarsCopy := sqltypes.CopyBindVariables(bindVars)
 			// if the table_schema is system system, route to default keyspace.
-			if specifiedKS != "" {
-				bindVarsCopy[indexSysTableParam(sqltypes.BvSchemaName, ksi+1)] = sqltypes.StringBindVariable(specifiedKS)
-			}
 			if specifiedKS != "" && sqlparser.SystemSchema(specifiedKS) {
-				bindVarsCopy[indexSysTableParam(BvTableName, tbi+1)] = sqltypes.StringBindVariable(tableName)
 				useDefaultRoute = true
 			} else {
 				// the use has specified a table_name - let's check if it's a routed table
 				if tableName != "" {
-					bindVarsCopy[indexSysTableParam(BvTableName, tbi+1)] = sqltypes.StringBindVariable(tableName)
 					rss, err := route.paramsRoutedTable(vcursor, bindVarsCopy, specifiedKS, tableName, ksi, tbi)
 					if err != nil {
 						// Only if keyspace is not found in vschema, we try with default keyspace.
@@ -532,7 +526,7 @@ func (route *Route) routeInfoSchemaQuery(vcursor VCursor, bindVars map[string]*q
 						}
 					}
 				} else {
-					// it was not a routed table, we only have table_schema to work with
+					// no table_name specified, we only have table_schema to work with
 					useSchemaRoute = true
 				}
 			}
