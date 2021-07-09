@@ -249,6 +249,60 @@ func TestMultipleSchemaPredicates(t *testing.T) {
 	require.EqualValues(t, 17, len(qr1.Rows))
 }
 
+func TestMultipleSchemaPredicatesDuplicatesHandling(t *testing.T) {
+	defer cluster.PanicHandler(t)
+	ctx := context.Background()
+	conn, err := mysql.Connect(ctx, &vtParams)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	query := fmt.Sprintf("select table_schema,table_name from information_schema.tables "+
+		"where table_schema = '%s' or (table_schema = '%s' and table_name = '%s')", "a", KeyspaceName, "t1")
+	qr1 := exec(t, conn, query)
+	require.EqualValues(t, 1, len(qr1.Rows))
+
+	//query = fmt.Sprintf("select table_schema,table_name from information_schema.tables "+
+	//	"where table_schema = '%s' and table_schema = '%s' or table_name = '%s'", "a", KeyspaceName, "t1")
+	//qr1 = exec(t, conn, query)
+	//require.EqualValues(t, 1, len(qr1.Rows))
+
+	// test OR with same predicates
+	query = fmt.Sprintf("select table_schema,table_name from information_schema.tables "+
+		"where (table_schema = '%s' and table_name = '%s') or (table_schema = '%s' and table_name = '%s')", KeyspaceName, "t1", KeyspaceName, "t1")
+	qr1 = exec(t, conn, query)
+	require.EqualValues(t, 1, len(qr1.Rows))
+
+	// test OR with different table_name predicates
+	//query = fmt.Sprintf("select table_schema,table_name from information_schema.tables "+
+	//	"where (table_schema = '%s' and table_name = '%s') or (table_schema = '%s' and table_name = '%s')", KeyspaceName, "t1", KeyspaceName, "t2")
+	//qr1 = exec(t, conn, query)
+	//require.EqualValues(t, 2, len(qr1.Rows))
+
+	// test no duplicated results
+	query = fmt.Sprintf("select table_schema,table_name from information_schema.tables "+
+		"where table_schema = '%s' or (table_schema = '%s' and table_name = '%s')", KeyspaceName, KeyspaceName, "t1")
+	qr1 = exec(t, conn, query)
+	require.EqualValues(t, 17, len(qr1.Rows))
+
+	// test no duplicated results
+	//query = fmt.Sprintf("select table_schema,table_name from information_schema.tables "+
+	//	"where table_name = '%s' or (table_schema = '%s' and table_name = '%s')", "t2", KeyspaceName, "t1")
+	//qr1 = exec(t, conn, query)
+	//require.EqualValues(t, 2, len(qr1.Rows))
+
+	// test with IN statement
+	//query = fmt.Sprintf("select table_schema,table_name from information_schema.tables "+
+	//	"where (table_schema, table_name) in (('%s','%s'), ('%s','%s'))", KeyspaceName, "t1", KeyspaceName, "t2")
+	//qr1 = exec(t, conn, query)
+	//require.EqualValues(t, 2, len(qr1.Rows))
+
+	// test mixed AND/OR with IN statement
+	//query = fmt.Sprintf("select table_schema,table_name from information_schema.tables "+
+	//	"where table_schema = '%s' and table_name in ('%s','%s')", KeyspaceName, "t1", "t2")
+	//qr1 = exec(t, conn, query)
+	//require.EqualValues(t, 2, len(qr1.Rows))
+}
+
 func TestSystemSchemaQueryWithUnion(t *testing.T) {
 	defer cluster.PanicHandler(t)
 	ctx := context.Background()
