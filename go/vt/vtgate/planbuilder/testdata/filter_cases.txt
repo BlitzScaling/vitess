@@ -2231,26 +2231,7 @@ Gen4 plan same as above
   }
 }
 
-# able to isolate table_schema value even when hidden inside of ORs
-"SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE (TABLE_SCHEMA = 'ks' and other_column = 42) OR (TABLE_SCHEMA = 'ks' and foobar = 'value')"
-{
-  "QueryType": "SELECT",
-  "Original": "SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE (TABLE_SCHEMA = 'ks' and other_column = 42) OR (TABLE_SCHEMA = 'ks' and foobar = 'value')",
-  "Instructions": {
-    "OperatorType": "Route",
-    "Variant": "SelectDBA",
-    "Keyspace": {
-      "Name": "main",
-      "Sharded": false
-    },
-    "FieldQuery": "select * from INFORMATION_SCHEMA.`TABLES` where 1 != 1",
-    "Query": "select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA = :__vtschemaname1 and (other_column = 42 or TABLE_SCHEMA = :__vtschemaname1) and (other_column = 42 or foobar = 'value')",
-    "SysTableTableSchema": "[VARBINARY(\"ks\")]"
-  }
-}
-
 # information_schema query with multiple different predicates in nested AND/OR expressions
-# TODO (ruimins) this conflicts with the test case above: rewrite AndExpr or not?
 "SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE (TABLE_SCHEMA = 'ks' and TABLE_NAME = 'a') OR (TABLE_SCHEMA = 'user' and TABLE_NAME = 'b')"
 {
   "QueryType": "SELECT",
