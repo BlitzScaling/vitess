@@ -88,6 +88,19 @@ func TestInformationSchemaQuery(t *testing.T) {
 	assertSingleRowIsReturned(t, conn, "table_schema IN ('ks') and table_schema = 'ks'", "vt_ks")
 	assertSingleRowIsReturned(t, conn, "table_schema IN ('ks') and table_schema = 'vt_ks'", "vt_ks")
 	assertSingleRowIsReturned(t, conn, "table_schema IN ('vt_ks') and table_schema = 'ks'", "vt_ks")
+
+	// TODO (ruimins) when trying to query a non-default keyspace in the following format, the router cannot tell the
+	// equivalence of the keyspace name and its full database name, resulting in the query being routed to the same
+	// vttablet twice and duplicate results
+	// e.g. (example/demo) table_schema = 'vt_product_0' and table_name = 'product'
+	// returns `(vt_product_0.product, vt_product_0.product)`
+
+	// TODO (ruimins) when querying a routed table in a sharded keyspace, specifying the keyspace name will lead to only
+	// a subset of results is returned
+	// e.g. (example/demp) table_schema = 'customer' and table_name = 'customer'
+	// returns `(vt_customer_80-.customer)`
+	// e.g. (example/demp) table_name = 'customer'
+	// returns `(vt_customer_80-.customer, vt_customer_-80.customer)`
 }
 
 func assertResultIsEmpty(t *testing.T, conn *mysql.Conn, pre string) {
