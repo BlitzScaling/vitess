@@ -161,31 +161,25 @@ func extractInfoSchemaRoutingPredicate(in sqlparser.Expr, sysTableSchema, sysTab
 			return sysTableSchemas, sysTableNames, nil
 		}
 	case *sqlparser.OrExpr:
-		sysTableSchemas := make([]evalengine.Expr, 0)
-		sysTableNames := make([]evalengine.Expr, 0)
-		schemas, names, err := extractInfoSchemaRoutingPredicate(cmp.Left, sysTableSchema, sysTableName)
+		leftSchemas, leftNames, err := extractInfoSchemaRoutingPredicate(cmp.Left, sysTableSchema, sysTableName)
 		if err != nil {
 			return nil, nil, err
 		}
-		sysTableSchemas = append(sysTableSchemas, schemas...)
-		sysTableNames = append(sysTableNames, names...)
-		schemas, names, err = extractInfoSchemaRoutingPredicate(cmp.Right, append(sysTableSchema, sysTableSchemas...), append(sysTableName, sysTableNames...))
+		rightSchemas, rightNames, err := extractInfoSchemaRoutingPredicate(cmp.Right, append(sysTableSchema, leftSchemas...), append(sysTableName, leftNames...))
 		if err != nil {
 			return nil, nil, err
 		}
-		sysTableSchemas = append(sysTableSchemas, schemas...)
-		sysTableNames = append(sysTableNames, names...)
-		return sysTableSchemas, sysTableNames, nil
+		return append(leftSchemas, rightSchemas...), append(leftNames, rightNames...), nil
 	case *sqlparser.AndExpr:
 		sysTableSchemas := make([]evalengine.Expr, 0)
 		sysTableNames := make([]evalengine.Expr, 0)
 		for _, subexpr := range sqlparser.SplitAndExpression(nil, cmp) {
-			schemas, names, err := extractInfoSchemaRoutingPredicate(subexpr, append(sysTableSchema, sysTableSchemas...), append(sysTableName, sysTableNames...))
+			subSchemas, subNames, err := extractInfoSchemaRoutingPredicate(subexpr, append(sysTableSchema, sysTableSchemas...), append(sysTableName, sysTableNames...))
 			if err != nil {
 				return nil, nil, err
 			}
-			sysTableSchemas = append(sysTableSchemas, schemas...)
-			sysTableNames = append(sysTableNames, names...)
+			sysTableSchemas = append(sysTableSchemas, subSchemas...)
+			sysTableNames = append(sysTableNames, subNames...)
 		}
 		return sysTableSchemas, sysTableNames, nil
 	}

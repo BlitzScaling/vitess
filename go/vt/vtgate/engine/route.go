@@ -457,7 +457,7 @@ func (route *Route) routeInfoSchemaQuery(vcursor VCursor, bindVars map[string]*q
 		}
 		ks := result.Value().ToString()
 		specifiedKSs = append(specifiedKSs, ks)
-		bindVars[indexSysTableParam(sqltypes.BvSchemaName, i+1)] = sqltypes.StringBindVariable(ks)
+		bindVars[indexSysTableParam(sqltypes.BvSchemaName, i)] = sqltypes.StringBindVariable(ks)
 	}
 
 	tableNames := make([]string, 0)
@@ -468,7 +468,7 @@ func (route *Route) routeInfoSchemaQuery(vcursor VCursor, bindVars map[string]*q
 		}
 		tabName := val.Value().ToString()
 		tableNames = append(tableNames, tabName)
-		bindVars[indexSysTableParam(BvTableName, i+1)] = sqltypes.StringBindVariable(tabName)
+		bindVars[indexSysTableParam(BvTableName, i)] = sqltypes.StringBindVariable(tabName)
 	}
 
 	if len(specifiedKSs) == 0 && len(tableNames) == 0 {
@@ -506,7 +506,7 @@ func (route *Route) routeInfoSchemaQuery(vcursor VCursor, bindVars map[string]*q
 					return nil, nil, err
 				}
 			} else {
-				bindVarsCopy[indexSysTableParam(BvTableName, i+1)] = sqltypes.StringBindVariable(destTable.Name.String())
+				bindVarsCopy[indexSysTableParam(BvTableName, i)] = sqltypes.StringBindVariable(destTable.Name.String())
 				replaceSchemaName(specifiedKS, specifiedKSs, bindVarsCopy)
 			}
 			keyspaceNames[specifiedKS] = true
@@ -569,7 +569,7 @@ func (route *Route) paramsRoutedTable(vcursor VCursor, bindVars map[string]*quer
 	if destination != nil {
 		// if we were able to find information about this table, let's use it
 		shards, _, err := vcursor.ResolveDestinations(destination.Keyspace.Name, nil, []key.Destination{key.DestinationAnyShard{}})
-		bindVars[indexSysTableParam(BvTableName, tbIndex+1)] = sqltypes.StringBindVariable(destination.Name.String())
+		bindVars[indexSysTableParam(BvTableName, tbIndex)] = sqltypes.StringBindVariable(destination.Name.String())
 		if tableSchema != "" {
 			setReplaceSchemaName(ksIndex, bindVars)
 		}
@@ -577,7 +577,7 @@ func (route *Route) paramsRoutedTable(vcursor VCursor, bindVars map[string]*quer
 	}
 
 	// no routed table info found. we'll return nil and check on the outside if we can find the table_schema
-	bindVars[indexSysTableParam(BvTableName, tbIndex+1)] = sqltypes.StringBindVariable(tableName)
+	bindVars[indexSysTableParam(BvTableName, tbIndex)] = sqltypes.StringBindVariable(tableName)
 	return nil, nil
 }
 
@@ -590,12 +590,12 @@ func (route *Route) getRoutedTableKeyspace(vcursor VCursor, tableName string) (*
 }
 
 func setReplaceSchemaName(index int, bindVars map[string]*querypb.BindVariable) {
-	delete(bindVars, indexSysTableParam(sqltypes.BvSchemaName, index+1))
-	bindVars[indexSysTableParam(sqltypes.BvReplaceSchemaName, index+1)] = sqltypes.Int64BindVariable(1)
+	delete(bindVars, indexSysTableParam(sqltypes.BvSchemaName, index))
+	bindVars[indexSysTableParam(sqltypes.BvReplaceSchemaName, index)] = sqltypes.Int64BindVariable(1)
 }
 
 func indexSysTableParam(name string, index int) string {
-	return fmt.Sprintf("%v%v", name, index)
+	return fmt.Sprintf("%v%v", name, index+1)
 }
 
 func replaceSchemaName(ks string, specifiedKSs []string, bindVars map[string]*querypb.BindVariable) {
