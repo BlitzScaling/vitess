@@ -84,6 +84,23 @@ func TestInformationSchemaQuery(t *testing.T) {
 	assertSingleRowIsReturned(t, conn, "table_schema IN ('ks')", "vt_ks")
 	assertSingleRowIsReturned(t, conn, "table_schema IN ('vt_ks')", "vt_ks")
 	assertSingleRowIsReturned(t, conn, "table_schema IN ('ks') and table_name = 't1'", "vt_ks")
+	// run end to end test for and expression.
+	assertSingleRowIsReturned(t, conn, "table_schema IN ('ks') and table_schema = 'ks'", "vt_ks")
+	assertSingleRowIsReturned(t, conn, "table_schema IN ('ks') and table_schema = 'vt_ks'", "vt_ks")
+	assertSingleRowIsReturned(t, conn, "table_schema IN ('vt_ks') and table_schema = 'ks'", "vt_ks")
+
+	// TODO (ruimins) when trying to query a non-default keyspace in the following format, the router cannot tell the
+	// equivalence of the keyspace name and its full database name, resulting in the query being routed to the same
+	// vttablet twice and duplicate results
+	// e.g. (example/demo) table_schema = 'vt_product_0' and table_name = 'product'
+	// returns `(vt_product_0.product, vt_product_0.product)`
+
+	// TODO (ruimins) when querying a routed table in a sharded keyspace, specifying the keyspace name will lead to only
+	// a subset of results is returned
+	// e.g. (example/demp) table_schema = 'customer' and table_name = 'customer'
+	// returns `(vt_customer_80-.customer)`
+	// e.g. (example/demp) table_name = 'customer'
+	// returns `(vt_customer_80-.customer, vt_customer_-80.customer)`
 }
 
 func assertResultIsEmpty(t *testing.T, conn *mysql.Conn, pre string) {
@@ -216,9 +233,107 @@ func TestMultipleSchemaPredicates(t *testing.T) {
 		"join information_schema.columns c "+
 		"on c.table_schema = t.table_schema and c.table_name = t.table_name "+
 		"where t.table_schema = '%s' and c.table_schema = '%s' and c.table_schema = '%s'", KeyspaceName, KeyspaceName, "a")
-	_, err = conn.ExecuteFetch(query, 1000, true)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "specifying two different database in the query is not supported")
+	qr1 = exec(t, conn, query)
+	require.EqualValues(t, 4, len(qr1.Fields))
+	require.EqualValues(t, 0, len(qr1.Rows))
+
+	// test IN statement with two keyspace names
+	query = fmt.Sprintf("select table_schema,table_name "+
+		"from information_schema.tables "+
+		"where table_schema in ('%s', '%s')", KeyspaceName, "a")
+	qr1 = exec(t, conn, query)
+	require.EqualValues(t, 2, len(qr1.Fields))
+	require.EqualValues(t, 17, len(qr1.Rows))
+
+	// test AND expression with two keyspace names
+	query = fmt.Sprintf("select table_schema "+
+		"from information_schema.tables "+
+		"where table_schema = '%s' and table_schema = '%s'", KeyspaceName, "a")
+	qr1 = exec(t, conn, query)
+	require.EqualValues(t, 1, len(qr1.Fields))
+	require.EqualValues(t, 0, len(qr1.Rows))
+
+	// test OR expression with two keyspace names
+	query = fmt.Sprintf("select table_schema "+
+		"from information_schema.tables "+
+		"where table_schema = '%s' or table_schema = '%s'", KeyspaceName, "a")
+	qr1 = exec(t, conn, query)
+	require.EqualValues(t, 1, len(qr1.Fields))
+	require.EqualValues(t, 17, len(qr1.Rows))
+}
+
+func TestMultipleSchemaPredicatesDuplicatesHandling(t *testing.T) {
+	defer cluster.PanicHandler(t)
+	ctx := context.Background()
+	conn, err := mysql.Connect(ctx, &vtParams)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	// test OR with invalid schema
+	query := fmt.Sprintf("select table_schema,table_name from information_schema.tables "+
+		"where table_schema = '%s' or (table_schema = '%s' and table_name = '%s')", "a", KeyspaceName, "t1")
+	qr1 := exec(t, conn, query)
+	require.EqualValues(t, 1, len(qr1.Rows))
+
+	// test OR with invalid subexpression
+	query = fmt.Sprintf("select table_schema,table_name from information_schema.tables "+
+		"where table_schema = '%s' and table_schema = '%s' or table_name = '%s'", "a", KeyspaceName, "t1")
+	qr1 = exec(t, conn, query)
+	require.EqualValues(t, 1, len(qr1.Rows))
+
+	// test OR with same predicates
+	query = fmt.Sprintf("select table_schema,table_name from information_schema.tables "+
+		"where (table_schema = '%s' and table_name = '%s') or (table_schema = '%s' and table_name = '%s')", KeyspaceName, "t1", KeyspaceName, "t1")
+	qr1 = exec(t, conn, query)
+	require.EqualValues(t, 1, len(qr1.Rows))
+
+	//test OR with different table_name predicates
+	query = fmt.Sprintf("select table_schema,table_name from information_schema.tables "+
+		"where (table_schema = '%s' and table_name = '%s') or (table_schema = '%s' and table_name = '%s')", KeyspaceName, "t1", KeyspaceName, "t2")
+	qr1 = exec(t, conn, query)
+	require.EqualValues(t, 2, len(qr1.Rows))
+
+	// test no duplicated results
+	query = fmt.Sprintf("select table_schema,table_name from information_schema.tables "+
+		"where table_schema = '%s' or (table_schema = '%s' and table_name = '%s')", KeyspaceName, KeyspaceName, "t1")
+	qr1 = exec(t, conn, query)
+	require.EqualValues(t, 17, len(qr1.Rows))
+
+	// test no duplicated results
+	query = fmt.Sprintf("select table_schema,table_name from information_schema.tables "+
+		"where table_name = '%s' or (table_schema = '%s' and table_name = '%s')", "t2", KeyspaceName, "t1")
+	qr1 = exec(t, conn, query)
+	require.EqualValues(t, 2, len(qr1.Rows))
+
+	// test no duplicated results
+	query = fmt.Sprintf("select table_schema,table_name from information_schema.tables "+
+		"where table_name = '%s' or (table_schema = '%s' and table_name = '%s')", "t1", KeyspaceName, "t1")
+	qr1 = exec(t, conn, query)
+	require.EqualValues(t, 1, len(qr1.Rows))
+
+	// test with IN statement
+	query = fmt.Sprintf("select table_schema,table_name from information_schema.tables "+
+		"where (table_schema, table_name) in (('%s','%s'), ('%s','%s'))", KeyspaceName, "t1", KeyspaceName, "t2")
+	qr1 = exec(t, conn, query)
+	require.EqualValues(t, 2, len(qr1.Rows))
+
+	// test mixed AND/OR with IN statement
+	query = fmt.Sprintf("select table_schema,table_name from information_schema.tables "+
+		"where table_schema = '%s' and table_name in ('%s','%s')", KeyspaceName, "t1", "t2")
+	qr1 = exec(t, conn, query)
+	require.EqualValues(t, 2, len(qr1.Rows))
+
+	// test multiple tables in same keyspace
+	query = fmt.Sprintf("select table_schema,table_name from information_schema.tables "+
+		"where table_name in ('%s','%s')", "t1", "t2")
+	qr1 = exec(t, conn, query)
+	require.EqualValues(t, 2, len(qr1.Rows))
+
+	// test invalid table_name
+	query = fmt.Sprintf("select table_schema,table_name from information_schema.tables "+
+		"where table_schema = '%s' and table_name in ('%s', '%s', '%s')", KeyspaceName, "t1", "tinvalid1", "tinvalid2")
+	qr1 = exec(t, conn, query)
+	require.EqualValues(t, 1, len(qr1.Rows))
 }
 
 func TestSystemSchemaQueryWithUnion(t *testing.T) {

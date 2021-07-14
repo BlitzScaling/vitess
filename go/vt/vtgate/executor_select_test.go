@@ -80,10 +80,10 @@ func TestSelectDBA(t *testing.T) {
 		query, map[string]*querypb.BindVariable{},
 	)
 	require.NoError(t, err)
-	wantQueries = []*querypb.BoundQuery{{Sql: "select COUNT(*) from INFORMATION_SCHEMA.`TABLES` where table_schema = :__vtschemaname and table_name = :__vttablename",
+	wantQueries = []*querypb.BoundQuery{{Sql: "select COUNT(*) from INFORMATION_SCHEMA.`TABLES` where table_schema = :__vtschemaname1 and table_name = :__vttablename1",
 		BindVariables: map[string]*querypb.BindVariable{
-			"__vtschemaname": sqltypes.StringBindVariable("performance_schema"),
-			"__vttablename":  sqltypes.StringBindVariable("foo"),
+			"__vtschemaname1": sqltypes.StringBindVariable("performance_schema"),
+			"__vttablename1":  sqltypes.StringBindVariable("foo"),
 		}}}
 	utils.MustMatch(t, wantQueries, sbc1.Queries)
 
@@ -94,10 +94,10 @@ func TestSelectDBA(t *testing.T) {
 		query, map[string]*querypb.BindVariable{},
 	)
 	require.NoError(t, err)
-	wantQueries = []*querypb.BoundQuery{{Sql: "select 1 from information_schema.table_constraints where constraint_schema = :__vtschemaname and table_name = :__vttablename",
+	wantQueries = []*querypb.BoundQuery{{Sql: "select 1 from information_schema.table_constraints where constraint_schema = :__vtschemaname1 and table_name = :__vttablename1",
 		BindVariables: map[string]*querypb.BindVariable{
-			"__vtschemaname": sqltypes.StringBindVariable("vt_ks"),
-			"__vttablename":  sqltypes.StringBindVariable("user"),
+			"__vtschemaname1": sqltypes.StringBindVariable("vt_ks"),
+			"__vttablename1":  sqltypes.StringBindVariable("user"),
 		}}}
 	utils.MustMatch(t, wantQueries, sbc1.Queries)
 
@@ -108,9 +108,9 @@ func TestSelectDBA(t *testing.T) {
 		query, map[string]*querypb.BindVariable{},
 	)
 	require.NoError(t, err)
-	wantQueries = []*querypb.BoundQuery{{Sql: "select 1 from information_schema.table_constraints where constraint_schema = :__vtschemaname",
+	wantQueries = []*querypb.BoundQuery{{Sql: "select 1 from information_schema.table_constraints where constraint_schema = :__vtschemaname1",
 		BindVariables: map[string]*querypb.BindVariable{
-			"__vtschemaname": sqltypes.StringBindVariable("vt_ks"),
+			"__vtschemaname1": sqltypes.StringBindVariable("vt_ks"),
 		}}}
 	utils.MustMatch(t, wantQueries, sbc1.Queries)
 }
@@ -2501,23 +2501,45 @@ func TestSelectFromInformationSchema(t *testing.T) {
 	executor, sbc1, _, _ := createExecutorEnv()
 	session := NewSafeSession(nil)
 
-	// check failure when trying to query two keyspaces
-	_, err := exec(executor, session, "SELECT B.TABLE_NAME FROM INFORMATION_SCHEMA.TABLES AS A, INFORMATION_SCHEMA.COLUMNS AS B WHERE A.TABLE_SCHEMA = 'TestExecutor' AND A.TABLE_SCHEMA = 'TestXBadSharding'")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "specifying two different database in the query is not supported")
-
 	// we pick a keyspace and query for table_schema = database(). should be routed to the picked keyspace
 	session.TargetString = "TestExecutor"
-	_, err = exec(executor, session, "SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = database()")
+	_, err := exec(executor, session, "SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = database()")
 	require.NoError(t, err)
 	assert.Equal(t, sbc1.StringQueries(), []string{"select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA = database()"})
+
+	// test to query two keyspaces
+	sbc1.Queries = nil
+	session.TargetString = "TestExecutor"
+	_, err = exec(executor, session, "SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA IN ('TestExecutor', 'performance_schema')")
+	require.NoError(t, err)
+	assert.Equal(t, sbc1.StringQueries(), []string{
+		"select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA in (:__vtschemaname1, :__vtschemaname2)"})
+
+	// test to query two keyspaces with and statement
+	sbc1.Queries = nil
+	session.TargetString = "TestExecutor"
+	_, err = exec(executor, session, "SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'TestExecutor' AND TABLE_SCHEMA = 'performance_schema'")
+	require.NoError(t, err)
+	assert.Equal(t, sbc1.StringQueries(), []string{
+		"select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA = :__vtschemaname1 and TABLE_SCHEMA = :__vtschemaname2"})
+
+	// test to query two keyspaces with join
+	sbc1.Queries = nil
+	session.TargetString = "TestExecutor"
+	_, err = exec(executor, session, "SELECT * FROM INFORMATION_SCHEMA.TABLES AS a JOIN INFORMATION_SCHEMA.TABLES AS b "+
+		"ON a.TABLE_SCHEMA = b.TABLE_SCHEMA AND a.TABLE_NAME = b.TABLE_NAME "+
+		"WHERE a.TABLE_SCHEMA = 'TestExecutor' AND b.TABLE_SCHEMA = 'performance_schema'")
+	require.NoError(t, err)
+	assert.Equal(t, sbc1.StringQueries(), []string{
+		"select * from INFORMATION_SCHEMA.`TABLES` as a join INFORMATION_SCHEMA.`TABLES` as b " +
+			"on a.TABLE_SCHEMA = b.TABLE_SCHEMA and a.TABLE_NAME = b.TABLE_NAME where a.TABLE_SCHEMA = :__vtschemaname1 and b.TABLE_SCHEMA = :__vtschemaname2"})
 
 	// `USE TestXBadSharding` and then query info_schema about TestExecutor - should target TestExecutor and not use the default keyspace
 	sbc1.Queries = nil
 	session.TargetString = "TestXBadSharding"
 	_, err = exec(executor, session, "SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'TestExecutor'")
 	require.NoError(t, err)
-	assert.Equal(t, sbc1.StringQueries(), []string{"select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA = :__vtschemaname"})
+	assert.Equal(t, sbc1.StringQueries(), []string{"select * from INFORMATION_SCHEMA.`TABLES` where TABLE_SCHEMA = :__vtschemaname1"})
 }
 
 func TestStreamOrderByLimitWithMultipleResults(t *testing.T) {

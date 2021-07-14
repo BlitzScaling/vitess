@@ -17,6 +17,8 @@ limitations under the License.
 package planbuilder
 
 import (
+	"fmt"
+
 	"vitess.io/vitess/go/sqltypes"
 	"vitess.io/vitess/go/vt/log"
 	"vitess.io/vitess/go/vt/sqlparser"
@@ -25,7 +27,7 @@ import (
 )
 
 func (pb *primitiveBuilder) findSysInfoRoutingPredicates(expr sqlparser.Expr, rut *route) error {
-	tableSchemas, tableNames, err := extractInfoSchemaRoutingPredicate(expr)
+	tableSchemas, tableNames, err := extractInfoSchemaRoutingPredicate(expr, rut.eroute.SysTableTableSchema, rut.eroute.SysTableTableName)
 	if err != nil {
 		return err
 	}
@@ -76,7 +78,7 @@ func isTableNameCol(col *sqlparser.ColName) bool {
 	return col.Name.EqualString("table_name")
 }
 
-func extractInfoSchemaRoutingPredicate(in sqlparser.Expr) ([]evalengine.Expr, []evalengine.Expr, error) {
+func extractInfoSchemaRoutingPredicate(in sqlparser.Expr, sysTableSchema, sysTableName []evalengine.Expr) ([]evalengine.Expr, []evalengine.Expr, error) {
 	switch cmp := in.(type) {
 	case *sqlparser.ComparisonExpr:
 		if cmp.Operator == sqlparser.EqualOp {
@@ -93,11 +95,19 @@ func extractInfoSchemaRoutingPredicate(in sqlparser.Expr) ([]evalengine.Expr, []
 				}
 				exprs := []evalengine.Expr{evalExpr}
 				if isSchemaName {
-					replaceOther(sqlparser.NewArgument(sqltypes.BvSchemaName))
-					return exprs, nil, nil
+					schemaName, exists := findSysTableParamIndex(evalExpr, sqltypes.BvSchemaName, sysTableSchema)
+					replaceOther(sqlparser.NewArgument(schemaName))
+					if !exists {
+						return exprs, nil, nil
+					}
+					return nil, nil, nil
 				}
-				replaceOther(sqlparser.NewArgument(engine.BvTableName))
-				return nil, exprs, nil
+				tableName, exists := findSysTableParamIndex(evalExpr, engine.BvTableName, sysTableName)
+				replaceOther(sqlparser.NewArgument(tableName))
+				if !exists {
+					return nil, exprs, nil
+				}
+				return nil, nil, nil
 			}
 		} else if cmp.Operator == sqlparser.InOp || cmp.Operator == sqlparser.NotInOp {
 			// left side has to be the column, i.e (1, 2) IN column is not allowed.
@@ -116,20 +126,10 @@ func extractInfoSchemaRoutingPredicate(in sqlparser.Expr) ([]evalengine.Expr, []
 			sysTableNames := make([]evalengine.Expr, 0, len(valTuples))
 			for index, col := range colNames {
 				isSchema, isTable := isTableSchemaOrName(col)
-				var name string
-				if isSchema {
-					name = sqltypes.BvSchemaName
-				} else if isTable {
-					name = engine.BvTableName
-				} else {
-					// only need to rewrite the SysTable and SysSchema
-					continue
-				}
 
 				for _, tuple := range valTuples {
 					expr := tuple[index]
 					if shouldRewrite(expr) {
-						tuple[index] = sqlparser.Argument(name)
 						evalExpr, err := sqlparser.Convert(expr)
 						if err != nil {
 							if err == sqlparser.ErrExprNotSupported {
@@ -139,10 +139,19 @@ func extractInfoSchemaRoutingPredicate(in sqlparser.Expr) ([]evalengine.Expr, []
 							}
 							return nil, nil, err
 						}
+						// only need to rewrite the SysTable and SysSchema
 						if isSchema {
-							sysTableSchemas = append(sysTableSchemas, evalExpr)
+							name, exists := findSysTableParamIndex(evalExpr, sqltypes.BvSchemaName, append(sysTableSchema, sysTableSchemas...))
+							if !exists {
+								sysTableSchemas = append(sysTableSchemas, evalExpr)
+							}
+							tuple[index] = sqlparser.Argument(name)
 						} else if isTable {
-							sysTableNames = append(sysTableNames, evalExpr)
+							name, exists := findSysTableParamIndex(evalExpr, engine.BvTableName, append(sysTableName, sysTableNames...))
+							if !exists {
+								sysTableNames = append(sysTableNames, evalExpr)
+							}
+							tuple[index] = sqlparser.Argument(name)
 						}
 					}
 				}
@@ -151,8 +160,55 @@ func extractInfoSchemaRoutingPredicate(in sqlparser.Expr) ([]evalengine.Expr, []
 			cmp.Right = populateValTuple(valTuples, len(colNames))
 			return sysTableSchemas, sysTableNames, nil
 		}
+	case *sqlparser.OrExpr:
+		leftSchemas, leftNames, err := extractInfoSchemaRoutingPredicate(cmp.Left, sysTableSchema, sysTableName)
+		if err != nil {
+			return nil, nil, err
+		}
+		rightSchemas, rightNames, err := extractInfoSchemaRoutingPredicate(cmp.Right, append(sysTableSchema, leftSchemas...), append(sysTableName, leftNames...))
+		if err != nil {
+			return nil, nil, err
+		}
+		return append(leftSchemas, rightSchemas...), append(leftNames, rightNames...), nil
+	case *sqlparser.AndExpr:
+		sysTableSchemas := make([]evalengine.Expr, 0)
+		sysTableNames := make([]evalengine.Expr, 0)
+		for _, subexpr := range sqlparser.SplitAndExpression(nil, cmp) {
+			subSchemas, subNames, err := extractInfoSchemaRoutingPredicate(subexpr, append(sysTableSchema, sysTableSchemas...), append(sysTableName, sysTableNames...))
+			if err != nil {
+				return nil, nil, err
+			}
+			sysTableSchemas = append(sysTableSchemas, subSchemas...)
+			sysTableNames = append(sysTableNames, subNames...)
+		}
+		return sysTableSchemas, sysTableNames, nil
 	}
 	return nil, nil, nil
+}
+
+func findSysTableParamIndex(node evalengine.Expr, prefix string, exprs []evalengine.Expr) (string, bool) {
+	for i, expr := range exprs {
+		if sysTableParamEquals(node, expr) {
+			return fmt.Sprintf("%v%v", prefix, i+1), true
+		}
+	}
+	return fmt.Sprintf("%v%v", prefix, len(exprs)+1), false
+}
+
+func sysTableParamEquals(lexpr evalengine.Expr, rexpr evalengine.Expr) bool {
+	switch lexpr.(type) {
+	case *evalengine.Literal:
+		if rv, ok := rexpr.(*evalengine.Literal); ok {
+			lv, _ := lexpr.(*evalengine.Literal)
+			return lv.Val.Value().ToString() == rv.Val.Value().ToString()
+		}
+	case *evalengine.BindVariable:
+		if rv, ok := rexpr.(*evalengine.BindVariable); ok {
+			lv, _ := lexpr.(*evalengine.BindVariable)
+			return lv.Key == rv.Key
+		}
+	}
+	return false
 }
 
 func populateValTuple(valTuples []sqlparser.ValTuple, numOfCol int) sqlparser.ValTuple {
