@@ -488,31 +488,32 @@ func (route *Route) routeInfoSchemaQuery(vcursor VCursor, bindVars map[string]*q
 		} else if destTable != nil {
 			specifiedKS = destTable.Keyspace.Name
 		}
+		// skip keyspace that is already resolved
+		if _, ok := keyspaceNames[specifiedKS]; ok || specifiedKS == "" {
+			continue
+		}
 
 		// it is a routed table, let's route to the keyspace it belongs to
-		// skip keyspace that is already resolved
-		if _, ok := keyspaceNames[specifiedKS]; !ok && specifiedKS != "" {
-			bindVarsCopy := sqltypes.CopyBindVariables(bindVars)
-			destinations, _, err := vcursor.ResolveDestinations(specifiedKS, nil, []key.Destination{key.DestinationAnyShard{}})
-			if err != nil {
-				// Only if keyspace is not found in vschema, we try with default keyspace.
-				// As the in the table_schema predicates for a keyspace 'ks' it can contain 'vt_ks'.
-				if vterrors.ErrState(err) == vterrors.BadDb {
-					specifiedKS = route.Keyspace.Name
-					if _, ok := keyspaceNames[specifiedKS]; ok {
-						continue
-					}
-				} else {
-					return nil, nil, err
+		bindVarsCopy := sqltypes.CopyBindVariables(bindVars)
+		destinations, _, err := vcursor.ResolveDestinations(specifiedKS, nil, []key.Destination{key.DestinationAnyShard{}})
+		if err != nil {
+			// Only if keyspace is not found in vschema, we try with default keyspace.
+			// As the in the table_schema predicates for a keyspace 'ks' it can contain 'vt_ks'.
+			if vterrors.ErrState(err) == vterrors.BadDb {
+				specifiedKS = route.Keyspace.Name
+				if _, ok := keyspaceNames[specifiedKS]; ok {
+					continue
 				}
 			} else {
-				bindVarsCopy[indexSysTableParam(BvTableName, i)] = sqltypes.StringBindVariable(destTable.Name.String())
-				replaceSchemaName(specifiedKS, specifiedKSs, bindVarsCopy)
+				return nil, nil, err
 			}
-			keyspaceNames[specifiedKS] = true
-			bvs = append(bvs, bindVarsCopy)
-			shards = append(shards, destinations...)
+		} else {
+			bindVarsCopy[indexSysTableParam(BvTableName, i)] = sqltypes.StringBindVariable(destTable.Name.String())
+			replaceSchemaName(specifiedKS, specifiedKSs, bindVarsCopy)
 		}
+		keyspaceNames[specifiedKS] = true
+		bvs = append(bvs, bindVarsCopy)
+		shards = append(shards, destinations...)
 	}
 
 	for i, specifiedKS := range specifiedKSs {
@@ -526,9 +527,9 @@ func (route *Route) routeInfoSchemaQuery(vcursor VCursor, bindVars map[string]*q
 		if _, ok := keyspaceNames[specifiedKS]; ok {
 			continue
 		}
+
 		keyspaceNames[specifiedKS] = true
 		bindVarsCopy := sqltypes.CopyBindVariables(bindVars)
-
 		destinations, _, err := vcursor.ResolveDestinations(specifiedKS, nil, []key.Destination{key.DestinationAnyShard{}})
 		if err != nil {
 			// fail to resolve schema, try default keyspace instead
@@ -543,7 +544,7 @@ func (route *Route) routeInfoSchemaQuery(vcursor VCursor, bindVars map[string]*q
 		} else if !isSystemSchema {
 			setReplaceSchemaName(i, bindVarsCopy)
 		}
-
+		keyspaceNames[specifiedKS] = true
 		bvs = append(bvs, bindVarsCopy)
 		shards = append(shards, destinations...)
 	}
