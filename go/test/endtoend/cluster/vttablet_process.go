@@ -71,6 +71,7 @@ type VttabletProcess struct {
 	DbPassword                  string
 	DbPort                      int
 	VreplicationTabletType      string
+	DbFlavor                    string
 	//Extra Args to be set before starting the vttablet process
 	ExtraArgs []string
 
@@ -116,6 +117,9 @@ func (vttablet *VttabletProcess) Setup() (err error) {
 	}
 	if vttablet.EnableSemiSync {
 		vttablet.proc.Args = append(vttablet.proc.Args, "-enable_semi_sync")
+	}
+	if vttablet.DbFlavor != "" {
+		vttablet.proc.Args = append(vttablet.proc.Args, fmt.Sprintf("-db_flavor=%s", vttablet.DbFlavor))
 	}
 
 	vttablet.proc.Args = append(vttablet.proc.Args, vttablet.ExtraArgs...)
@@ -325,8 +329,14 @@ func (vttablet *VttabletProcess) getVarValue(keyname string) string {
 	return fmt.Sprintf("%v", object)
 }
 
-// TearDown shuts down the running vttablet service
+// TearDown shuts down the running vttablet service and fails after 10 seconds
 func (vttablet *VttabletProcess) TearDown() error {
+	return vttablet.TearDownWithTimeout(10 * time.Second)
+}
+
+// TearDownWithTimeout shuts down the running vttablet service and fails once the given
+// duration has elapsed.
+func (vttablet *VttabletProcess) TearDownWithTimeout(timeout time.Duration) error {
 	if vttablet.proc == nil || vttablet.exit == nil {
 		return nil
 	}
@@ -338,7 +348,7 @@ func (vttablet *VttabletProcess) TearDown() error {
 		vttablet.proc = nil
 		return nil
 
-	case <-time.After(10 * time.Second):
+	case <-time.After(timeout):
 		proc := vttablet.proc
 		if proc != nil {
 			vttablet.proc.Process.Kill()
